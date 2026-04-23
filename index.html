@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedidos 🫐</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { min-height:100vh; background:linear-gradient(160deg,#0b1a0b 0%,#132613 60%,#0b1a0b 100%); font-family:Georgia,serif; color:#e8f5e8; display:flex; flex-direction:column; align-items:center; padding:24px 16px 40px; }
+.header { text-align:center; margin-bottom:20px; width:100%; max-width:520px; }
+.header h1 { font-size:26px; color:#a8e6a3; letter-spacing:1px; text-shadow:0 0 24px rgba(168,230,163,0.28); }
+.header p { color:#4a7a4a; font-size:12px; letter-spacing:1px; margin-top:3px; }
+.tabs { display:flex; gap:6px; margin-bottom:24px; background:rgba(255,255,255,0.04); border-radius:14px; padding:4px; width:100%; max-width:520px; }
+.tab { flex:1; padding:12px 0; background:none; border:none; border-radius:10px; color:#5a8a5a; font-size:15px; cursor:pointer; font-family:Georgia,serif; transition:all 0.2s; }
+.tab.active { background:linear-gradient(135deg,#4caf50,#2e7d32); color:#fff; font-weight:bold; box-shadow:0 2px 14px rgba(76,175,80,0.38); }
+.content { width:100%; max-width:520px; }
+.view { display:none; flex-direction:column; gap:18px; }
+.view.active { display:flex; }
+label { display:block; margin-bottom:7px; color:#7ec87a; font-size:11px; letter-spacing:1.5px; font-weight:bold; }
+input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(168,230,163,0.25); border-radius:12px; color:#e8f5e8; font-size:16px; padding:14px 16px; outline:none; font-family:Georgia,serif; color-scheme:dark; }
+input:focus, select:focus { border-color:rgba(168,230,163,0.6); }
+.card { background:rgba(255,255,255,0.045); border:1px solid rgba(168,230,163,0.15); border-radius:14px; margin-bottom:10px; }
+.product-row { display:flex; align-items:center; gap:8px; padding:12px 14px; }
+.emoji { font-size:22px; min-width:28px; text-align:center; }
+.product-row select { flex:1; background:rgba(0,0,0,0.25); border:1px solid rgba(168,230,163,0.18); border-radius:10px; padding:10px 8px; font-size:15px; }
+.qty-ctrl { display:flex; align-items:center; background:rgba(0,0,0,0.25); border:1px solid rgba(168,230,163,0.18); border-radius:10px; overflow:hidden; }
+.qty-ctrl button { background:none; border:none; color:#a8e6a3; font-size:22px; width:40px; height:44px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.qty-val { color:#e8f5e8; font-size:16px; font-weight:bold; min-width:28px; text-align:center; }
+.price { color:#a8e6a3; font-weight:bold; font-size:15px; min-width:52px; text-align:right; }
+.del-btn { background:none; border:none; color:rgba(255,100,100,0.7); cursor:pointer; font-size:22px; padding:0 4px; display:flex; align-items:center; }
+.add-btn { width:100%; background:rgba(255,255,255,0.04); border:1px dashed rgba(168,230,163,0.25); border-radius:12px; color:#5a8a5a; font-size:15px; padding:14px 0; cursor:pointer; font-family:Georgia,serif; margin-top:4px; }
+.total-box { background:rgba(76,175,80,0.08); border:1px solid rgba(76,175,80,0.25); border-radius:14px; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; }
+.total-label { font-size:16px; font-weight:bold; color:#ccc; }
+.total-amount { font-size:26px; font-weight:bold; color:#a8e6a3; }
+.save-btn { width:100%; background:linear-gradient(135deg,#4caf50,#2e7d32); border:none; border-radius:14px; color:#fff; font-size:17px; font-weight:bold; padding:18px 0; cursor:pointer; box-shadow:0 4px 24px rgba(76,175,80,0.4); font-family:Georgia,serif; }
+.save-btn:disabled { background:rgba(76,175,80,0.2); box-shadow:none; cursor:not-allowed; }
+.error { color:#ff7070; font-size:13px; text-align:center; min-height:20px; }
+.grand-total { background:linear-gradient(135deg,rgba(76,175,80,0.18),rgba(46,125,50,0.08)); border:1px solid rgba(168,230,163,0.25); border-radius:16px; padding:20px 22px; display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
+.toggle { display:flex; gap:6px; margin-bottom:14px; background:rgba(255,255,255,0.04); border-radius:12px; padding:4px; }
+.toggle button { flex:1; padding:10px 0; background:none; border:1px solid transparent; border-radius:9px; color:#5a8a5a; cursor:pointer; font-size:14px; font-family:Georgia,serif; }
+.toggle button.active { background:rgba(76,175,80,0.28); border-color:rgba(168,230,163,0.3); color:#a8e6a3; font-weight:bold; }
+.refresh-btn { width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:10px; color:#5a8a5a; font-size:13px; padding:8px 0; cursor:pointer; margin-bottom:14px; font-family:Georgia,serif; }
+.sum-card { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:12px; margin-bottom:10px; overflow:hidden; cursor:pointer; transition:all 0.18s; }
+.sum-card.open { background:rgba(76,175,80,0.1); border-color:rgba(168,230,163,0.35); }
+.sum-header { display:flex; justify-content:space-between; align-items:center; padding:15px 18px; }
+.sum-body { border-top:1px solid rgba(255,255,255,0.07); padding:10px 18px 14px; }
+.sum-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:14px; }
+.done-view { text-align:center; padding:48px 0; }
+.new-btn { background:linear-gradient(135deg,#4caf50,#2e7d32); border:none; border-radius:14px; color:#fff; font-size:17px; font-weight:bold; padding:15px 48px; cursor:pointer; box-shadow:0 4px 24px rgba(76,175,80,0.45); font-family:Georgia,serif; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="font-size:36px;margin-bottom:4px">🫐</div>
+  <h1>Pedidos</h1>
+  <p>WHATSAPP → GOOGLE SHEETS</p>
+</div>
+
+<div class="tabs">
+  <button class="tab active" id="tabCaptura">📝 Capturar</button>
+  <button class="tab" id="tabResumen">📊 Resumen</button>
+</div>
+
+<div class="content">
+  <div id="captura" class="view active">
+    <div>
+      <label>NOMBRE DEL CLIENTE</label>
+      <input id="cliente" type="text" placeholder="Ej. Melys, Adriana...">
+    </div>
+    <div>
+      <label>FECHA DE ENTREGA</label>
+      <input id="fecha" type="date">
+    </div>
+    <div>
+      <label>PRODUCTOS</label>
+      <div id="productos"></div>
+      <button class="add-btn" id="addBtn">+ Agregar producto</button>
+    </div>
+    <div class="total-box">
+      <span class="total-label">Total</span>
+      <span class="total-amount" id="total">$0</span>
+    </div>
+    <p class="error" id="error"></p>
+    <button class="save-btn" id="saveBtn">📊 Guardar en Google Sheets</button>
+  </div>
+
+  <div id="resumen" class="view">
+    <div class="grand-total">
+      <div>
+        <p style="font-size:11px;color:#6b9e6b;letter-spacing:1.5px">TOTAL GENERAL</p>
+        <p id="granTotal" style="font-size:32px;font-weight:bold;color:#a8e6a3;margin-top:5px">$0</p>
+      </div>
+      <div style="text-align:right">
+        <p id="numClientes" style="font-size:12px;color:#6b9e6b">0 clientes</p>
+        <p id="numRegistros" style="font-size:12px;color:#6b9e6b;margin-top:3px">0 registros</p>
+      </div>
+    </div>
+    <div class="toggle">
+      <button id="btnCliente" class="active">👤 Por Cliente</button>
+      <button id="btnFecha">📅 Por Fecha</button>
+    </div>
+    <button class="refresh-btn" id="refreshBtn">↻ Actualizar</button>
+    <div id="resumenCards"></div>
+  </div>
+</div>
+
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwEBo_BK08gD-lRIa_oxNqhVUu82x2UXMC0QxJ4kd-EOUAlp6_N_w3VHC6G0knXuN1S/exec";
+const SPREADSHEET_ID = "1-4wdL1HYkZRhKTz-kZeTp2TpynUXXk4oAOgL_YrzMug";
+
+const PRODUCTOS = {
+  "Zarzamora":      { precio:70,  costo:45,  emoji:"🫐" },
+  "Frambuesa":      { precio:70,  costo:45,  emoji:"🍓" },
+  "Blueberry":      { precio:70,  costo:50,  emoji:"🫐" },
+  "Elote amarillo": { precio:100, costo:50,  emoji:"🌽" },
+  "Elote blanco":   { precio:60,  costo:30,  emoji:"🌽" }
+};
+
+let items = [{ producto:"Zarzamora", cantidad:1 }];
+let vistaActual = "cliente";
+let expandido = null;
+let resumenData = [];
+
+// TABS
+document.getElementById("tabCaptura").addEventListener("click", function() { switchTab("captura"); });
+document.getElementById("tabResumen").addEventListener("click", function() { switchTab("resumen"); });
+
+function switchTab(tab) {
+  document.querySelectorAll(".tab").forEach(function(t) { t.classList.remove("active"); });
+  document.querySelectorAll(".view").forEach(function(v) { v.classList.remove("active"); });
+  if (tab === "captura") {
+    document.getElementById("tabCaptura").classList.add("active");
+    document.getElementById("captura").classList.add("active");
+  } else {
+    document.getElementById("tabResumen").classList.add("active");
+    document.getElementById("resumen").classList.add("active");
+    cargarResumen();
+  }
+}
+
+// AGREGAR PRODUCTO
+document.getElementById("addBtn").addEventListener("click", function() {
+  items.push({ producto:"Zarzamora", cantidad:1 });
+  renderItems();
+});
+
+// GUARDAR
+document.getElementById("saveBtn").addEventListener("click", guardar);
+
+// RESUMEN BOTONES
+document.getElementById("btnCliente").addEventListener("click", function() { setVista("cliente"); });
+document.getElementById("btnFecha").addEventListener("click", function() { setVista("fecha"); });
+document.getElementById("refreshBtn").addEventListener("click", cargarResumen);
+
+function renderItems() {
+  var container = document.getElementById("productos");
+  container.innerHTML = "";
+  items.forEach(function(item, i) {
+    var opts = Object.keys(PRODUCTOS).map(function(p) {
+      return '<option value="' + p + '"' + (p === item.producto ? ' selected' : '') + '>' + p + '</option>';
+    }).join("");
+
+    var div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML =
+      '<div class="product-row">' +
+        '<span class="emoji">' + PRODUCTOS[item.producto].emoji + '</span>' +
+        '<select class="prod-select" data-idx="' + i + '">' + opts + '</select>' +
+        '<div class="qty-ctrl">' +
+          '<button class="qty-minus" data-idx="' + i + '">−</button>' +
+          '<span class="qty-val">' + item.cantidad + '</span>' +
+          '<button class="qty-plus" data-idx="' + i + '">+</button>' +
+        '</div>' +
+        '<span class="price">$' + (PRODUCTOS[item.producto].precio * item.cantidad) + '</span>' +
+        (items.length > 1 ? '<button class="del-btn" data-idx="' + i + '">×</button>' : '') +
+      '</div>';
+    container.appendChild(div);
+  });
+
+  // Event listeners para cada fila
+  container.querySelectorAll(".prod-select").forEach(function(sel) {
+    sel.addEventListener("change", function() {
+      items[parseInt(this.dataset.idx)].producto = this.value;
+      renderItems();
+    });
+  });
+  container.querySelectorAll(".qty-minus").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var idx = parseInt(this.dataset.idx);
+      items[idx].cantidad = Math.max(1, items[idx].cantidad - 1);
+      renderItems();
+    });
+  });
+  container.querySelectorAll(".qty-plus").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var idx = parseInt(this.dataset.idx);
+      items[idx].cantidad = items[idx].cantidad + 1;
+      renderItems();
+    });
+  });
+  container.querySelectorAll(".del-btn").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var idx = parseInt(this.dataset.idx);
+      items.splice(idx, 1);
+      renderItems();
+    });
+  });
+
+  var total = items.reduce(function(s, it) { return s + PRODUCTOS[it.producto].precio * it.cantidad; }, 0);
+  document.getElementById("total").textContent = "$" + total;
+}
+
+async function guardar() {
+  var cliente = document.getElementById("cliente").value.trim();
+  var fecha = document.getElementById("fecha").value;
+  var errEl = document.getElementById("error");
+  var btn = document.getElementById("saveBtn");
+  errEl.textContent = "";
+  if (!cliente) { errEl.textContent = "Escribe el nombre del cliente."; return; }
+  if (!fecha) { errEl.textContent = "Selecciona la fecha de entrega."; return; }
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+  try {
+    var filas = items.map(function(it) {
+      var p = PRODUCTOS[it.producto];
+      var venta = p.precio * it.cantidad;
+      var sub = p.costo * it.cantidad;
+      return [it.producto, it.cantidad, cliente, p.precio, venta, "Pendiente", fecha, sub, sub, venta - sub];
+    });
+    var url = SCRIPT_URL + "?data=" + encodeURIComponent(JSON.stringify(filas));
+    await fetch(url, { mode:"no-cors" });
+    var total = items.reduce(function(s,it){ return s + PRODUCTOS[it.producto].precio * it.cantidad; }, 0);
+    document.getElementById("captura").innerHTML =
+      '<div class="done-view">' +
+        '<div style="font-size:70px;margin-bottom:16px">✅</div>' +
+        '<h2 style="color:#a8e6a3;margin-bottom:8px">¡Pedido guardado!</h2>' +
+        '<p style="color:#6b9e6b">' + items.length + ' producto' + (items.length!==1?"s":"") + ' de <strong style="color:#e8f5e8">' + cliente + '</strong></p>' +
+        '<p style="color:#a8e6a3;font-size:28px;font-weight:bold;margin:8px 0">$' + total + '</p>' +
+        '<p style="color:#4a7a4a;font-size:12px">Revisa tu Google Sheet ✓</p>' +
+        '<button class="new-btn" id="newBtn">+ Nuevo pedido</button>' +
+      '</div>';
+    document.getElementById("newBtn").addEventListener("click", function() { location.reload(); });
+  } catch(e) {
+    errEl.textContent = "Error: " + e.message;
+    btn.disabled = false;
+    btn.textContent = "📊 Guardar en Google Sheets";
+  }
+}
+
+// RESUMEN
+async function cargarResumen() {
+  document.getElementById("resumenCards").innerHTML = "<p style='text-align:center;color:#6b9e6b;padding:30px'>⏳ Cargando...</p>";
+  try {
+    var res = await fetch("https://sheets.googleapis.com/v4/spreadsheets/" + SPREADSHEET_ID + "/values/Pedidos!A:J");
+    var data = await res.json();
+    resumenData = (data.values||[]).slice(1).filter(function(r){ return r[0] && r[2]; });
+    renderResumen();
+  } catch(e) {
+    document.getElementById("resumenCards").innerHTML = "<p style='color:#ff8a80;text-align:center;padding:20px'>" + e.message + "</p>";
+  }
+}
+
+function setVista(v) {
+  vistaActual = v; expandido = null;
+  document.getElementById("btnCliente").classList.toggle("active", v==="cliente");
+  document.getElementById("btnFecha").classList.toggle("active", v==="fecha");
+  renderResumen();
+}
+
+function renderResumen() {
+  var mxn = function(v){ return parseFloat((v||"0").toString().replace(/[$,]/g,""))||0; };
+  var byCliente={}, byFecha={};
+  resumenData.forEach(function(r){
+    var c=r[2]||"?", f=r[6]||"Sin fecha", t=mxn(r[4]);
+    if(!byCliente[c]) byCliente[c]={total:0,items:[]};
+    byCliente[c].total+=t; byCliente[c].items.push({producto:r[0],cantidad:parseInt(r[1])||0,total:t,fecha:f});
+    if(!byFecha[f]) byFecha[f]={total:0,items:[]};
+    byFecha[f].total+=t; byFecha[f].items.push({producto:r[0],cantidad:parseInt(r[1])||0,total:t,cliente:c});
+  });
+  var granTotal=resumenData.reduce(function(s,r){return s+mxn(r[4]);},0);
+  document.getElementById("granTotal").textContent="$"+granTotal.toFixed(0);
+  document.getElementById("numClientes").textContent=Object.keys(byCliente).length+" clientes";
+  document.getElementById("numRegistros").textContent=resumenData.length+" registros";
+  var src=vistaActual==="cliente"?Object.entries(byCliente).sort(function(a,b){return b[1].total-a[1].total;}):Object.entries(byFecha).sort(function(a,b){return b[0]>a[0]?1:-1;});
+  var container=document.getElementById("resumenCards");
+  container.innerHTML="";
+  src.forEach(function(entry){
+    var key=entry[0], info=entry[1];
+    var isOpen=expandido===key;
+    var card=document.createElement("div");
+    card.className="sum-card"+(isOpen?" open":"");
+    var rows=info.items.map(function(it){
+      return '<div class="sum-row"><span style="color:#ccc">'+it.cantidad+'× '+it.producto+'</span><span style="display:flex;gap:14px;align-items:center"><span style="color:#5a8a5a;font-size:12px">'+(it.fecha||it.cliente||"")+'</span><span style="color:#a8e6a3">$'+it.total.toFixed(0)+'</span></span></div>';
+    }).join("");
+    card.innerHTML=
+      '<div class="sum-header">'+
+        '<div><p style="font-weight:bold;font-size:15px;color:#e8f5e8">'+(vistaActual==="fecha"?"📅 ":"")+key+'</p>'+
+        '<p style="font-size:12px;color:#6b9e6b;margin-top:3px">'+info.items.length+' producto'+(info.items.length!==1?"s":"")+'</p></div>'+
+        '<div style="text-align:right"><p style="color:#a8e6a3;font-weight:bold;font-size:18px">$'+info.total.toFixed(0)+'</p>'+
+        '<p style="font-size:11px;color:#4a7a4a">'+(isOpen?"▲":"▼")+'</p></div>'+
+      '</div>'+
+      (isOpen?'<div class="sum-body">'+rows+'<div style="display:flex;justify-content:flex-end;padding-top:8px"><span style="color:#a8e6a3;font-weight:bold">Total: $'+info.total.toFixed(0)+'</span></div></div>':"");
+    card.addEventListener("click", function(){
+      expandido = expandido===key ? null : key;
+      renderResumen();
+    });
+    container.appendChild(card);
+  });
+  if(resumenData.length===0) container.innerHTML="<p style='text-align:center;color:#5a8a5a;padding:50px'>No hay pedidos aún</p>";
+}
+
+renderItems();
+</script>
+</body>
+</html>

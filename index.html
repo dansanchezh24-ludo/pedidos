@@ -7,42 +7,43 @@
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { min-height:100vh; background:linear-gradient(160deg,#0b1a0b 0%,#132613 60%,#0b1a0b 100%); font-family:Georgia,serif; color:#e8f5e8; display:flex; flex-direction:column; align-items:center; padding:24px 16px 40px; }
-.header { text-align:center; margin-bottom:20px; width:100%; max-width:520px; }
+.header { text-align:center; margin-bottom:20px; width:100%; max-width:560px; }
 .header h1 { font-size:26px; color:#a8e6a3; letter-spacing:1px; text-shadow:0 0 24px rgba(168,230,163,0.28); }
 .header p { color:#4a7a4a; font-size:12px; letter-spacing:1px; margin-top:3px; }
-.tabs { display:flex; gap:6px; margin-bottom:24px; background:rgba(255,255,255,0.04); border-radius:14px; padding:4px; width:100%; max-width:520px; }
+.tabs { display:flex; gap:6px; margin-bottom:24px; background:rgba(255,255,255,0.04); border-radius:14px; padding:4px; width:100%; max-width:560px; }
 .tab { flex:1; padding:12px 0; background:none; border:none; border-radius:10px; color:#5a8a5a; font-size:15px; cursor:pointer; font-family:Georgia,serif; transition:all 0.2s; }
 .tab.active { background:linear-gradient(135deg,#4caf50,#2e7d32); color:#fff; font-weight:bold; box-shadow:0 2px 14px rgba(76,175,80,0.38); }
-.content { width:100%; max-width:520px; }
+.content { width:100%; max-width:560px; }
 .view { display:none; flex-direction:column; gap:18px; }
 .view.active { display:flex; }
 label { display:block; margin-bottom:7px; color:#7ec87a; font-size:11px; letter-spacing:1.5px; font-weight:bold; }
 input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(168,230,163,0.25); border-radius:12px; color:#e8f5e8; font-size:16px; padding:14px 16px; outline:none; font-family:Georgia,serif; color-scheme:dark; }
-input:focus, select:focus { border-color:rgba(168,230,163,0.6); }
-.card { background:rgba(255,255,255,0.045); border:1px solid rgba(168,230,163,0.15); border-radius:14px; margin-bottom:10px; }
-.product-row { display:flex; align-items:center; gap:8px; padding:12px 14px; }
-.emoji { font-size:22px; min-width:28px; text-align:center; }
-.product-row select { flex:1; background:rgba(0,0,0,0.25); border:1px solid rgba(168,230,163,0.18); border-radius:10px; padding:10px 8px; font-size:15px; }
+.ubi-toggle { display:flex; gap:8px; }
+.ubi-btn { flex:1; padding:14px 0; background:rgba(255,255,255,0.04); border:1px solid rgba(168,230,163,0.2); border-radius:12px; color:#5a8a5a; font-size:15px; cursor:pointer; font-family:Georgia,serif; transition:all 0.2s; text-align:center; }
+.ubi-btn.active { background:rgba(76,175,80,0.25); border-color:rgba(168,230,163,0.5); color:#a8e6a3; font-weight:bold; }
+.prod-card { background:rgba(255,255,255,0.045); border:1px solid rgba(168,230,163,0.15); border-radius:14px; margin-bottom:10px; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+.row { display:flex; align-items:center; gap:8px; }
+.sel-prod { flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(168,230,163,0.2); border-radius:10px; color:#e8f5e8; font-size:14px; padding:9px 10px; }
+.sel-fruta { flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(168,230,163,0.2); border-radius:10px; color:#e8f5e8; font-size:14px; padding:9px 10px; }
 .qty-ctrl { display:flex; align-items:center; background:rgba(0,0,0,0.25); border:1px solid rgba(168,230,163,0.18); border-radius:10px; overflow:hidden; }
-.qty-ctrl button { background:none; border:none; color:#a8e6a3; font-size:22px; width:40px; height:44px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-.qty-val { color:#e8f5e8; font-size:16px; font-weight:bold; min-width:28px; text-align:center; }
-.price { color:#a8e6a3; font-weight:bold; font-size:15px; min-width:52px; text-align:right; }
-.del-btn { background:none; border:none; color:rgba(255,100,100,0.7); cursor:pointer; font-size:22px; padding:0 4px; }
+.qty-ctrl button { background:none; border:none; color:#a8e6a3; font-size:22px; width:40px; height:40px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.qty-val { color:#e8f5e8; font-size:15px; font-weight:bold; min-width:28px; text-align:center; }
+.del-btn { background:none; border:none; color:rgba(255,100,100,0.7); cursor:pointer; font-size:22px; padding:0 2px; }
+.price-tag { color:#a8e6a3; font-weight:bold; font-size:15px; min-width:52px; text-align:right; }
+.frutas-grid { display:flex; flex-direction:column; gap:6px; }
+.fruta-row { display:flex; align-items:center; gap:8px; }
+.fruta-label { color:#7ec87a; font-size:11px; letter-spacing:1px; min-width:60px; }
 .add-btn { width:100%; background:rgba(255,255,255,0.04); border:1px dashed rgba(168,230,163,0.25); border-radius:12px; color:#5a8a5a; font-size:15px; padding:14px 0; cursor:pointer; font-family:Georgia,serif; }
 .total-box { background:rgba(76,175,80,0.08); border:1px solid rgba(76,175,80,0.25); border-radius:14px; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; }
-.total-label { font-size:16px; font-weight:bold; color:#ccc; }
-.total-amount { font-size:26px; font-weight:bold; color:#a8e6a3; }
 .save-btn { width:100%; background:linear-gradient(135deg,#4caf50,#2e7d32); border:none; border-radius:14px; color:#fff; font-size:17px; font-weight:bold; padding:18px 0; cursor:pointer; box-shadow:0 4px 24px rgba(76,175,80,0.4); font-family:Georgia,serif; }
 .save-btn:disabled { background:rgba(76,175,80,0.2); box-shadow:none; cursor:not-allowed; }
 .error { color:#ff7070; font-size:13px; text-align:center; min-height:20px; }
 .grand-total { background:linear-gradient(135deg,rgba(76,175,80,0.18),rgba(46,125,50,0.08)); border:1px solid rgba(168,230,163,0.25); border-radius:16px; padding:20px 22px; display:flex; justify-content:space-between; align-items:center; }
-/* Filtro fecha */
 .fecha-filter { background:rgba(255,255,255,0.04); border:1px solid rgba(168,230,163,0.2); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
 .fecha-filter-row { display:flex; gap:8px; align-items:center; }
 .fecha-filter select { flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(168,230,163,0.25); border-radius:10px; color:#e8f5e8; font-size:14px; padding:10px 12px; }
 .clear-btn { background:rgba(255,100,100,0.15); border:1px solid rgba(255,100,100,0.3); border-radius:10px; color:#ff8a80; font-size:13px; padding:10px 14px; cursor:pointer; font-family:Georgia,serif; white-space:nowrap; }
 .refresh-btn { width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:10px; color:#5a8a5a; font-size:13px; padding:8px 0; cursor:pointer; font-family:Georgia,serif; }
-/* Tabla clientes */
 .cliente-table { width:100%; border-collapse:collapse; }
 .cliente-table th { color:#7ec87a; font-size:11px; letter-spacing:1.5px; padding:8px 12px; text-align:left; border-bottom:1px solid rgba(168,230,163,0.2); }
 .cliente-table th:last-child { text-align:right; }
@@ -52,19 +53,11 @@ input:focus, select:focus { border-color:rgba(168,230,163,0.6); }
 .cliente-row td:last-child { text-align:right; color:#a8e6a3; font-weight:bold; }
 .cliente-name { color:#e8f5e8; font-weight:bold; }
 .cliente-sub { color:#6b9e6b; font-size:12px; margin-top:2px; }
-.detail-row { background:rgba(0,0,0,0.2); }
-.detail-row td { padding:6px 12px 6px 28px; font-size:13px; color:#aaa; }
+.detail-row td { padding:6px 12px 6px 28px; font-size:13px; color:#aaa; background:rgba(0,0,0,0.2); }
 .detail-row td:last-child { color:#a8e6a3; text-align:right; }
 .total-row td { padding:14px 12px; font-weight:bold; border-top:2px solid rgba(168,230,163,0.3); color:#a8e6a3; }
-.total-row td:last-child { font-size:20px; }
-.sum-card { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:12px; margin-bottom:10px; overflow:hidden; cursor:pointer; }
-.sum-card.open { background:rgba(76,175,80,0.1); border-color:rgba(168,230,163,0.35); }
-.sum-header { display:flex; justify-content:space-between; align-items:center; padding:15px 18px; }
-.sum-body { border-top:1px solid rgba(255,255,255,0.07); padding:10px 18px 14px; }
-.sum-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:14px; }
 .done-view { text-align:center; padding:48px 0; }
 .new-btn { background:linear-gradient(135deg,#4caf50,#2e7d32); border:none; border-radius:14px; color:#fff; font-size:17px; font-weight:bold; padding:15px 48px; cursor:pointer; box-shadow:0 4px 24px rgba(76,175,80,0.45); font-family:Georgia,serif; margin-top:20px; }
-.badge { display:inline-block; background:rgba(76,175,80,0.25); border-radius:20px; padding:2px 10px; font-size:11px; color:#a8e6a3; margin-left:6px; }
 </style>
 </head>
 <body>
@@ -81,8 +74,6 @@ input:focus, select:focus { border-color:rgba(168,230,163,0.6); }
 </div>
 
 <div class="content">
-
-  <!-- CAPTURA -->
   <div id="captura" class="view active">
     <div>
       <label>NOMBRE DEL CLIENTE</label>
@@ -93,22 +84,26 @@ input:focus, select:focus { border-color:rgba(168,230,163,0.6); }
       <input id="fecha" type="date">
     </div>
     <div>
+      <label>UBICACIÓN DE ENTREGA</label>
+      <div class="ubi-toggle">
+        <button class="ubi-btn active" id="ubiAzaleas">🏡 Azaleas</button>
+        <button class="ubi-btn" id="ubiSereno">🌿 El Sereno</button>
+      </div>
+    </div>
+    <div>
       <label>PRODUCTOS</label>
       <div id="productos"></div>
       <button class="add-btn" id="addBtn">+ Agregar producto</button>
     </div>
     <div class="total-box">
-      <span class="total-label">Total</span>
-      <span class="total-amount" id="total">$0</span>
+      <span style="font-size:16px;font-weight:bold;color:#ccc">Total</span>
+      <span style="font-size:26px;font-weight:bold;color:#a8e6a3" id="total">$0</span>
     </div>
     <p class="error" id="error"></p>
     <button class="save-btn" id="saveBtn">📊 Guardar en Google Sheets</button>
   </div>
 
-  <!-- RESUMEN -->
   <div id="resumen" class="view">
-
-    <!-- Gran total -->
     <div class="grand-total">
       <div>
         <p style="font-size:11px;color:#6b9e6b;letter-spacing:1.5px" id="granTotalLabel">TOTAL GENERAL</p>
@@ -119,38 +114,42 @@ input:focus, select:focus { border-color:rgba(168,230,163,0.6); }
         <p id="numRegistros" style="font-size:12px;color:#6b9e6b;margin-top:3px">0 registros</p>
       </div>
     </div>
-
-    <!-- Filtro por fecha -->
     <div class="fecha-filter">
       <label style="margin:0">FILTRAR POR FECHA DE ENTREGA</label>
       <div class="fecha-filter-row">
-        <select id="fechaFiltro">
-          <option value="">— Todas las fechas —</option>
-        </select>
+        <select id="fechaFiltro"><option value="">— Todas las fechas —</option></select>
         <button class="clear-btn" id="clearFecha">✕ Limpiar</button>
       </div>
     </div>
-
     <button class="refresh-btn" id="refreshBtn">↻ Actualizar</button>
-
-    <!-- Tabla por cliente -->
     <div id="resumenCards"></div>
-
   </div>
 </div>
 
 <script>
 var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwIqpDQvGr7pstVMRWJt-yPIvRfy5EqGQRWSV9oJBTPzrSzeP3Fzbkt5RS2od0Sl949/exec";
+var FRUTAS = ["Zarzamora","Frambuesa","Blueberry"];
 
-var PRODUCTOS = {
-  "Zarzamora":      { precio:70,  costo:45,  emoji:"🫐" },
-  "Frambuesa":      { precio:70,  costo:45,  emoji:"🍓" },
-  "Blueberry":      { precio:70,  costo:50,  emoji:"🫐" },
-  "Elote amarillo": { precio:100, costo:50,  emoji:"🌽" },
-  "Elote blanco":   { precio:60,  costo:30,  emoji:"🌽" }
-};
+// slots = cuántas frutas se eligen
+var CATALOGO = [
+  { id:"zarzamora", nombre:"Zarzamora",                precio:70,  costo:45, slots:0, emoji:"🫐" },
+  { id:"frambuesa", nombre:"Frambuesa",                 precio:70,  costo:45, slots:0, emoji:"🍓" },
+  { id:"blueberry", nombre:"Blueberry",                 precio:70,  costo:50, slots:0, emoji:"🫐" },
+  { id:"elote_am",  nombre:"Elote amarillo",            precio:100, costo:50, slots:0, emoji:"🌽" },
+  { id:"elote_bl",  nombre:"Elote blanco",              precio:60,  costo:30, slots:0, emoji:"🌽" },
+  { id:"ind_1",     nombre:"Individual (clamshell) 1x", precio:50,  costo:30, slots:1, emoji:"📦" },
+  { id:"ind_2",     nombre:"Individual (clamshell) 2x", precio:90,  costo:55, slots:2, emoji:"📦" },
+  { id:"ind_3",     nombre:"Individual (clamshell) 3x", precio:130, costo:80, slots:3, emoji:"📦" },
+  { id:"fam_1",     nombre:"Familiar (bote) 1x",        precio:120, costo:70, slots:1, emoji:"🪣" },
+  { id:"fam_2",     nombre:"Familiar (bote) 2x",        precio:220, costo:130,slots:2, emoji:"🪣" },
+  { id:"fam_3",     nombre:"Familiar (bote) 3x",        precio:320, costo:190,slots:3, emoji:"🪣" },
+];
 
-var items = [{ producto:"Zarzamora", cantidad:1 }];
+function getCat(id) { return CATALOGO.find(function(c){return c.id===id;})||CATALOGO[0]; }
+
+// Cada item: { catId, frutas:["","",""] (array de slots), cantidad }
+var items = [{ catId:"zarzamora", frutas:[], cantidad:1 }];
+var ubicacion = "Azaleas";
 var resumenData = [];
 var expandido = null;
 
@@ -158,16 +157,25 @@ var expandido = null;
 document.getElementById("tabCaptura").addEventListener("click", function(){ switchTab("captura"); });
 document.getElementById("tabResumen").addEventListener("click", function(){ switchTab("resumen"); });
 
-// Captura
-document.getElementById("addBtn").addEventListener("click", function(){ items.push({producto:"Zarzamora",cantidad:1}); renderItems(); });
-document.getElementById("saveBtn").addEventListener("click", guardar);
+// Ubicacion
+document.getElementById("ubiAzaleas").addEventListener("click", function(){ setUbi("Azaleas"); });
+document.getElementById("ubiSereno").addEventListener("click",  function(){ setUbi("El Sereno"); });
 
-// Resumen
+function setUbi(u) {
+  ubicacion = u;
+  document.getElementById("ubiAzaleas").classList.toggle("active", u==="Azaleas");
+  document.getElementById("ubiSereno").classList.toggle("active",  u==="El Sereno");
+}
+
+document.getElementById("addBtn").addEventListener("click", function(){
+  items.push({ catId:"zarzamora", frutas:[], cantidad:1 });
+  renderItems();
+});
+document.getElementById("saveBtn").addEventListener("click", guardar);
 document.getElementById("refreshBtn").addEventListener("click", cargarResumen);
 document.getElementById("fechaFiltro").addEventListener("change", renderResumen);
 document.getElementById("clearFecha").addEventListener("click", function(){
-  document.getElementById("fechaFiltro").value = "";
-  renderResumen();
+  document.getElementById("fechaFiltro").value=""; renderResumen();
 });
 
 function switchTab(tab) {
@@ -186,28 +194,79 @@ function switchTab(tab) {
 function renderItems() {
   var container = document.getElementById("productos");
   container.innerHTML = "";
+
   items.forEach(function(item, i) {
-    var opts = Object.keys(PRODUCTOS).map(function(p){
-      return '<option value="'+p+'"'+(p===item.producto?' selected':'')+'>'+p+'</option>';
+    var cat = getCat(item.catId);
+    // Asegurar que frutas tenga el tamaño correcto
+    while (item.frutas.length < cat.slots) item.frutas.push(FRUTAS[0]);
+    if (item.frutas.length > cat.slots) item.frutas = item.frutas.slice(0, cat.slots);
+
+    var opts = CATALOGO.map(function(c){
+      return '<option value="'+c.id+'"'+(c.id===item.catId?' selected':'')+'>'+c.emoji+' '+c.nombre+' — $'+c.precio+'</option>';
     }).join("");
+
     var div = document.createElement("div");
-    div.className = "card";
-    div.innerHTML =
-      '<div class="product-row">'+
-        '<span class="emoji">'+PRODUCTOS[item.producto].emoji+'</span>'+
-        '<select class="prod-sel" data-i="'+i+'">'+opts+'</select>'+
-        '<div class="qty-ctrl">'+
-          '<button class="qm" data-i="'+i+'">−</button>'+
-          '<span class="qty-val">'+item.cantidad+'</span>'+
-          '<button class="qp" data-i="'+i+'">+</button>'+
-        '</div>'+
-        '<span class="price">$'+(PRODUCTOS[item.producto].precio*item.cantidad)+'</span>'+
-        (items.length>1?'<button class="del-btn" data-i="'+i+'">×</button>':'')+
-      '</div>';
+    div.className = "prod-card";
+
+    // Fila 1: selector de producto + borrar
+    var row1 = document.createElement("div");
+    row1.className = "row";
+    row1.innerHTML =
+      '<span style="font-size:20px;min-width:26px;text-align:center">'+cat.emoji+'</span>'+
+      '<select class="sel-prod" data-i="'+i+'">'+opts+'</select>'+
+      (items.length>1?'<button class="del-btn" data-i="'+i+'">×</button>':'');
+    div.appendChild(row1);
+
+    // Slots de fruta
+    if (cat.slots > 0) {
+      var labels = cat.slots===1 ? ["Fruta"] : cat.slots===2 ? ["Fruta 1","Fruta 2"] : ["Fruta 1","Fruta 2","Fruta 3"];
+      labels.forEach(function(lbl, si) {
+        var frow = document.createElement("div");
+        frow.className = "row";
+        var fSel = document.createElement("select");
+        fSel.className = "sel-fruta";
+        fSel.dataset.i = i;
+        fSel.dataset.si = si;
+        FRUTAS.forEach(function(f){
+          var o = document.createElement("option");
+          o.value = f; o.textContent = f;
+          if (f === item.frutas[si]) o.selected = true;
+          fSel.appendChild(o);
+        });
+        frow.innerHTML = '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px;min-width:52px">'+lbl+'</span>';
+        frow.appendChild(fSel);
+        div.appendChild(frow);
+      });
+    }
+
+    // Fila final: cantidad + precio
+    var rowQ = document.createElement("div");
+    rowQ.className = "row";
+    rowQ.innerHTML =
+      '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px">CANT.</span>'+
+      '<div class="qty-ctrl">'+
+        '<button class="qm" data-i="'+i+'">−</button>'+
+        '<span class="qty-val">'+item.cantidad+'</span>'+
+        '<button class="qp" data-i="'+i+'">+</button>'+
+      '</div>'+
+      '<span style="margin-left:auto;color:#a8e6a3;font-weight:bold;font-size:15px">$'+(cat.precio*item.cantidad)+'</span>';
+    div.appendChild(rowQ);
     container.appendChild(div);
   });
-  container.querySelectorAll(".prod-sel").forEach(function(el){
-    el.addEventListener("change", function(){ items[+this.dataset.i].producto=this.value; renderItems(); });
+
+  // Event listeners
+  container.querySelectorAll(".sel-prod").forEach(function(el){
+    el.addEventListener("change", function(){
+      var i=+this.dataset.i;
+      items[i].catId=this.value;
+      items[i].frutas=[];
+      renderItems();
+    });
+  });
+  container.querySelectorAll(".sel-fruta").forEach(function(el){
+    el.addEventListener("change", function(){
+      items[+this.dataset.i].frutas[+this.dataset.si]=this.value;
+    });
   });
   container.querySelectorAll(".qm").forEach(function(el){
     el.addEventListener("click", function(){ var i=+this.dataset.i; items[i].cantidad=Math.max(1,items[i].cantidad-1); renderItems(); });
@@ -218,30 +277,48 @@ function renderItems() {
   container.querySelectorAll(".del-btn").forEach(function(el){
     el.addEventListener("click", function(){ items.splice(+this.dataset.i,1); renderItems(); });
   });
-  document.getElementById("total").textContent = "$"+items.reduce(function(s,it){ return s+PRODUCTOS[it.producto].precio*it.cantidad; },0);
+
+  var total = items.reduce(function(s,it){ return s+getCat(it.catId).precio*it.cantidad; },0);
+  document.getElementById("total").textContent = "$"+total;
+}
+
+function nombreCompleto(item) {
+  var cat = getCat(item.catId);
+  if (cat.slots===0) return cat.nombre;
+  if (cat.slots===1) return cat.nombre+" · "+(item.frutas[0]||"");
+  return cat.nombre+" · "+(item.frutas.join(" + ")||"");
 }
 
 async function guardar() {
   var cliente = document.getElementById("cliente").value.trim();
-  var fecha = document.getElementById("fecha").value;
-  var errEl = document.getElementById("error");
-  var btn = document.getElementById("saveBtn");
-  errEl.textContent = "";
+  var fecha   = document.getElementById("fecha").value;
+  var errEl   = document.getElementById("error");
+  var btn     = document.getElementById("saveBtn");
+  errEl.textContent="";
   if (!cliente){ errEl.textContent="Escribe el nombre del cliente."; return; }
-  if (!fecha){ errEl.textContent="Selecciona la fecha de entrega."; return; }
+  if (!fecha)  { errEl.textContent="Selecciona la fecha de entrega."; return; }
+  for (var i=0;i<items.length;i++){
+    var cat=getCat(items[i].catId);
+    for (var si=0;si<cat.slots;si++){
+      if (!items[i].frutas[si]){ errEl.textContent="Selecciona todas las frutas del producto "+(i+1)+"."; return; }
+    }
+  }
   btn.disabled=true; btn.textContent="Guardando...";
   try {
     var filas = items.map(function(it){
-      var p=PRODUCTOS[it.producto]; var v=p.precio*it.cantidad; var s=p.costo*it.cantidad;
-      return [it.producto,it.cantidad,cliente,p.precio,v,"Pendiente",fecha,s,s,v-s];
+      var cat=getCat(it.catId);
+      var nombre=nombreCompleto(it);
+      var v=cat.precio*it.cantidad; var s=cat.costo*it.cantidad;
+      return [nombre,it.cantidad,cliente,cat.precio,v,"Pendiente",fecha,s,s,v-s,ubicacion];
     });
     await fetch(SCRIPT_URL+"?data="+encodeURIComponent(JSON.stringify(filas)),{mode:"no-cors"});
-    var total=items.reduce(function(s,it){return s+PRODUCTOS[it.producto].precio*it.cantidad;},0);
+    var total=items.reduce(function(s,it){return s+getCat(it.catId).precio*it.cantidad;},0);
     document.getElementById("captura").innerHTML=
       '<div class="done-view">'+
         '<div style="font-size:70px;margin-bottom:16px">✅</div>'+
         '<h2 style="color:#a8e6a3;margin-bottom:8px">¡Pedido guardado!</h2>'+
         '<p style="color:#6b9e6b">'+items.length+' producto'+(items.length!==1?"s":"")+ ' de <strong style="color:#e8f5e8">'+cliente+'</strong></p>'+
+        '<p style="color:#6b9e6b;font-size:13px;margin-top:4px">📍 '+ubicacion+'</p>'+
         '<p style="color:#a8e6a3;font-size:28px;font-weight:bold;margin:8px 0">$'+total+'</p>'+
         '<p style="color:#4a7a4a;font-size:12px">Revisa tu Google Sheet ✓</p>'+
         '<button class="new-btn" id="newBtn">+ Nuevo pedido</button>'+
@@ -255,30 +332,25 @@ async function guardar() {
 
 function fmtFecha(f) {
   if (!f) return "Sin fecha";
-  if (typeof f === "string" && f.includes("T")) f = f.split("T")[0];
+  if (typeof f==="string"&&f.includes("T")) f=f.split("T")[0];
   return f;
 }
 
 async function cargarResumen() {
   document.getElementById("resumenCards").innerHTML="<p style='text-align:center;color:#6b9e6b;padding:30px'>⏳ Cargando...</p>";
   try {
-    var res = await fetch(SCRIPT_URL+"?action=read");
-    var data = await res.json();
-    resumenData = (data.rows||[]).slice(1).filter(function(r){ return r[0]&&r[2]; });
-
-    // Poblar selector de fechas
-    var fechas = {};
-    resumenData.forEach(function(r){ fechas[fmtFecha(r[6])] = true; });
-    var sel = document.getElementById("fechaFiltro");
-    var currentVal = sel.value;
-    sel.innerHTML = '<option value="">— Todas las fechas —</option>';
+    var res=await fetch(SCRIPT_URL+"?action=read");
+    var data=await res.json();
+    resumenData=(data.rows||[]).slice(1).filter(function(r){return r[0]&&r[2];});
+    var fechas={};
+    resumenData.forEach(function(r){fechas[fmtFecha(r[6])]=true;});
+    var sel=document.getElementById("fechaFiltro");
+    var cur=sel.value;
+    sel.innerHTML='<option value="">— Todas las fechas —</option>';
     Object.keys(fechas).sort().reverse().forEach(function(f){
-      var opt = document.createElement("option");
-      opt.value = f; opt.textContent = f;
-      if (f === currentVal) opt.selected = true;
-      sel.appendChild(opt);
+      var o=document.createElement("option"); o.value=f; o.textContent=f;
+      if(f===cur) o.selected=true; sel.appendChild(o);
     });
-
     renderResumen();
   } catch(e) {
     document.getElementById("resumenCards").innerHTML="<p style='color:#ff8a80;text-align:center;padding:20px'>"+e.message+"</p>";
@@ -286,92 +358,48 @@ async function cargarResumen() {
 }
 
 function renderResumen() {
-  var filtroFecha = document.getElementById("fechaFiltro").value;
-
-  // Filtrar datos
-  var datos = resumenData.filter(function(r){
-    if (!filtroFecha) return true;
-    return fmtFecha(r[6]) === filtroFecha;
-  });
-
-  // Agrupar por cliente
-  var byCliente = {};
+  var filtro=document.getElementById("fechaFiltro").value;
+  var datos=resumenData.filter(function(r){return !filtro||fmtFecha(r[6])===filtro;});
+  var byCliente={};
   datos.forEach(function(r){
-    var c = r[2]||"?";
-    var t = parseFloat(r[4])||0;
-    if (!byCliente[c]) byCliente[c] = { total:0, items:[] };
-    byCliente[c].total += t;
-    byCliente[c].items.push({ producto:r[0], cantidad:r[1], total:t, fecha:fmtFecha(r[6]) });
+    var c=r[2]||"?"; var t=parseFloat(r[4])||0;
+    if(!byCliente[c]) byCliente[c]={total:0,items:[],ubicacion:r[10]||""};
+    byCliente[c].total+=t;
+    byCliente[c].items.push({producto:r[0],cantidad:r[1],total:t,fecha:fmtFecha(r[6])});
   });
-
-  var granTotal = datos.reduce(function(s,r){ return s+(parseFloat(r[4])||0); },0);
-  var label = filtroFecha ? "TOTAL · "+filtroFecha : "TOTAL GENERAL";
-  document.getElementById("granTotalLabel").textContent = label;
-  document.getElementById("granTotal").textContent = "$"+granTotal.toFixed(0);
-  document.getElementById("numClientes").textContent = Object.keys(byCliente).length+" clientes";
-  document.getElementById("numRegistros").textContent = datos.length+" registros";
-
-  var container = document.getElementById("resumenCards");
-  container.innerHTML = "";
-
-  if (datos.length === 0) {
-    container.innerHTML = "<p style='text-align:center;color:#5a8a5a;padding:40px'>No hay pedidos para esta fecha</p>";
-    return;
-  }
-
-  // Tabla estilo sheet
-  var sorted = Object.entries(byCliente).sort(function(a,b){ return b[1].total-a[1].total; });
-
-  var table = document.createElement("table");
-  table.className = "cliente-table";
-  table.innerHTML =
-    '<thead><tr>'+
-      '<th>CLIENTE</th>'+
-      '<th>PRODUCTOS</th>'+
-      '<th>TOTAL</th>'+
-    '</tr></thead>';
-  var tbody = document.createElement("tbody");
-
+  var granTotal=datos.reduce(function(s,r){return s+(parseFloat(r[4])||0);},0);
+  document.getElementById("granTotalLabel").textContent=filtro?"TOTAL · "+filtro:"TOTAL GENERAL";
+  document.getElementById("granTotal").textContent="$"+granTotal.toFixed(0);
+  document.getElementById("numClientes").textContent=Object.keys(byCliente).length+" clientes";
+  document.getElementById("numRegistros").textContent=datos.length+" registros";
+  var container=document.getElementById("resumenCards");
+  container.innerHTML="";
+  if(datos.length===0){container.innerHTML="<p style='text-align:center;color:#5a8a5a;padding:40px'>No hay pedidos para esta fecha</p>";return;}
+  var sorted=Object.entries(byCliente).sort(function(a,b){return b[1].total-a[1].total;});
+  var table=document.createElement("table"); table.className="cliente-table";
+  table.innerHTML='<thead><tr><th>CLIENTE</th><th></th><th>TOTAL</th></tr></thead>';
+  var tbody=document.createElement("tbody");
   sorted.forEach(function(entry){
-    var nombre = entry[0], info = entry[1];
-    var isOpen = expandido === nombre;
-
-    // Fila cliente
-    var tr = document.createElement("tr");
-    tr.className = "cliente-row";
-    tr.innerHTML =
-      '<td><div class="cliente-name">'+nombre+'</div>'+
-        '<div class="cliente-sub">'+info.items.length+' producto'+(info.items.length!==1?"s":"")+'</div></td>'+
-      '<td style="color:#6b9e6b;font-size:13px">'+(isOpen?"▲ ocultar":"▼ ver detalle")+'</td>'+
+    var nombre=entry[0],info=entry[1],isOpen=expandido===nombre;
+    var tr=document.createElement("tr"); tr.className="cliente-row";
+    var ubiTag=info.ubicacion?'<span style="font-size:11px;color:#5a8a5a"> 📍'+info.ubicacion+'</span>':'';
+    tr.innerHTML=
+      '<td><div class="cliente-name">'+nombre+ubiTag+'</div><div class="cliente-sub">'+info.items.length+' producto'+(info.items.length!==1?"s":"")+'</div></td>'+
+      '<td style="color:#6b9e6b;font-size:13px">'+(isOpen?"▲":"▼")+'</td>'+
       '<td>$'+info.total.toFixed(0)+'</td>';
-    tr.addEventListener("click", function(){
-      expandido = (expandido===nombre)?null:nombre;
-      renderResumen();
-    });
+    tr.addEventListener("click",function(){expandido=(expandido===nombre)?null:nombre;renderResumen();});
     tbody.appendChild(tr);
-
-    // Filas detalle
-    if (isOpen) {
+    if(isOpen){
       info.items.forEach(function(it){
-        var dtr = document.createElement("tr");
-        dtr.className = "detail-row";
-        dtr.innerHTML =
-          '<td style="color:#a8e6a3">'+it.cantidad+'× '+it.producto+'</td>'+
-          '<td style="color:#5a8a5a;font-size:12px">'+it.fecha+'</td>'+
-          '<td>$'+it.total.toFixed(0)+'</td>';
+        var dtr=document.createElement("tr"); dtr.className="detail-row";
+        dtr.innerHTML='<td style="color:#a8e6a3">'+it.cantidad+'× '+it.producto+'</td><td style="color:#5a8a5a;font-size:12px">'+it.fecha+'</td><td>$'+it.total.toFixed(0)+'</td>';
         tbody.appendChild(dtr);
       });
     }
   });
-
-  // Fila total
-  var totalTr = document.createElement("tr");
-  totalTr.className = "total-row";
-  totalTr.innerHTML =
-    '<td colspan="2">TOTAL '+(filtroFecha||"GENERAL")+'</td>'+
-    '<td>$'+granTotal.toFixed(0)+'</td>';
-  tbody.appendChild(totalTr);
-
+  var ttr=document.createElement("tr"); ttr.className="total-row";
+  ttr.innerHTML='<td colspan="2">TOTAL '+(filtro||"GENERAL")+'</td><td>$'+granTotal.toFixed(0)+'</td>';
+  tbody.appendChild(ttr);
   table.appendChild(tbody);
   container.appendChild(table);
 }

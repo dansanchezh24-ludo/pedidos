@@ -56,6 +56,10 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 .done-view { text-align:center; padding:48px 0; }
 .new-btn { background:linear-gradient(135deg,#4caf50,#2e7d32); border:none; border-radius:14px; color:#fff; font-size:17px; font-weight:bold; padding:15px 48px; cursor:pointer; box-shadow:0 4px 24px rgba(76,175,80,0.45); font-family:Georgia,serif; margin-top:20px; }
 
+/* ── PRECIO FAMILIAR ── */
+.familiar-active-banner { background:linear-gradient(135deg,rgba(245,158,11,0.18),rgba(217,119,6,0.08)); border:1px solid rgba(245,158,11,0.35); border-radius:12px; padding:10px 16px; font-size:13px; color:#fbbf24; text-align:center; letter-spacing:0.5px; }
+.ubi-btn.familiar.active { background:linear-gradient(135deg,#f59e0b,#d97706); box-shadow:0 2px 14px rgba(245,158,11,0.38); }
+.ubi-btn.familiar { border-color:rgba(245,158,11,0.2); }
 /* ── PROVEEDOR TAB ── */
 .prov-summary { background:linear-gradient(135deg,rgba(76,175,80,0.18),rgba(46,125,50,0.08)); border:1px solid rgba(168,230,163,0.25); border-radius:16px; padding:20px 22px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; text-align:center; }
 .prov-stat-label { font-size:10px; color:#6b9e6b; letter-spacing:1.5px; margin-bottom:4px; }
@@ -136,6 +140,14 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
         <button class="ubi-btn active" id="ubiAzaleas">🏡 Azaleas</button>
         <button class="ubi-btn" id="ubiSereno">🌿 El Sereno</button>
       </div>
+    </div>
+    <div>
+      <label>TIPO DE PRECIO</label>
+      <div class="ubi-toggle">
+        <button class="ubi-btn active" id="precioNormalBtn">💰 Normal</button>
+        <button class="ubi-btn familiar" id="precioFamiliarBtn">🤝 Precio familiar</button>
+      </div>
+      <div id="familiarBanner" style="display:none;margin-top:8px" class="familiar-active-banner">🤝 Precios a costo de proveedor</div>
     </div>
     <div>
       <label>PRODUCTOS</label>
@@ -234,10 +246,11 @@ function getFrutasDisponibles(catId) {
   });
 }
 
-// Productos disponibles en el selector de producto según ubicación.
-// - El Sereno: ocultar todas las frutas sueltas de $70
-// - Azaleas: ocultar solo Blueberry grande suelta ($70)
 function getCatalogoDisponible() {
+  if (precioFamiliar) {
+    var IDS = ["zarzamora","frambuesa","blueberry_chica_b","elote_am","elote_bl"];
+    return CATALOGO.filter(function(c){ return IDS.indexOf(c.id) !== -1; });
+  }
   return CATALOGO.filter(function(c) {
     if (ubicacion === "El Sereno" && c.precio === 70 && c.slots === 0) return false;
     if (ubicacion === "Azaleas"   && c.id === "blueberry_grande")        return false;
@@ -249,6 +262,19 @@ function getCatalogoDisponible() {
 // ─── Tabs ───
 var items = [{ catId:"zarzamora", frutas:[], cantidad:1 }];
 var ubicacion = "Azaleas";
+var precioFamiliar = false;
+
+function getPrecioEfectivo(cat) { return precioFamiliar ? cat.costo : cat.precio; }
+
+function setPrecioFamiliar(f) {
+  precioFamiliar = f;
+  document.getElementById("precioNormalBtn").classList.toggle("active", !f);
+  document.getElementById("precioFamiliarBtn").classList.toggle("active", f);
+  document.getElementById("familiarBanner").style.display = f ? "block" : "none";
+  // En modo familiar el primer producto válido es zarzamora
+  items = [{ catId: f ? "zarzamora" : items[0].catId, frutas:[], cantidad:1 }];
+  renderItems();
+}
 var resumenData = [];
 var proveedorData = [];
 var expandido = null;
@@ -257,8 +283,10 @@ document.getElementById("tabCaptura").addEventListener("click",  function(){ swi
 document.getElementById("tabResumen").addEventListener("click",  function(){ switchTab("resumen"); });
 document.getElementById("tabProveedor").addEventListener("click", function(){ switchTab("proveedor"); });
 
-document.getElementById("ubiAzaleas").addEventListener("click", function(){ setUbi("Azaleas"); });
-document.getElementById("ubiSereno").addEventListener("click",  function(){ setUbi("El Sereno"); });
+document.getElementById("ubiAzaleas").addEventListener("click",      function(){ setUbi("Azaleas"); });
+document.getElementById("ubiSereno").addEventListener("click",       function(){ setUbi("El Sereno"); });
+document.getElementById("precioNormalBtn").addEventListener("click",  function(){ setPrecioFamiliar(false); });
+document.getElementById("precioFamiliarBtn").addEventListener("click",function(){ setPrecioFamiliar(true); });
 
 function setUbi(u) {
   ubicacion = u;
@@ -307,7 +335,7 @@ function renderItems() {
     while (item.frutas.length < cat.slots) item.frutas.push(frutasDisp[0]);
     if (item.frutas.length > cat.slots) item.frutas = item.frutas.slice(0, cat.slots);
     var opts = catDisp.map(function(c){
-      return '<option value="'+c.id+'"'+(c.id===item.catId?' selected':'')+'>'+c.emoji+' '+c.nombre+' — $'+c.precio+'</option>';
+      return '<option value="'+c.id+'"'+(c.id===item.catId?' selected':'')+'>'+c.emoji+' '+c.nombre+' — $'+getPrecioEfectivo(c)+'</option>';
     }).join("");
     var div = document.createElement("div");
     div.className = "prod-card";
@@ -347,7 +375,7 @@ function renderItems() {
         '<span class="qty-val">'+item.cantidad+'</span>'+
         '<button class="qp" data-i="'+i+'">+</button>'+
       '</div>'+
-      '<span style="margin-left:auto;color:#a8e6a3;font-weight:bold;font-size:15px">$'+(cat.precio*item.cantidad)+'</span>';
+      '<span style="margin-left:auto;color:#a8e6a3;font-weight:bold;font-size:15px">$'+(getPrecioEfectivo(cat)*item.cantidad)+'</span>';
     div.appendChild(rowQ);
     container.appendChild(div);
   });
@@ -368,7 +396,7 @@ function renderItems() {
   container.querySelectorAll(".del-btn").forEach(function(el){
     el.addEventListener("click", function(){ items.splice(+this.dataset.i,1); renderItems(); });
   });
-  var total = items.reduce(function(s,it){ return s+getCat(it.catId).precio*it.cantidad; },0);
+  var total = items.reduce(function(s,it){ return s+getPrecioEfectivo(getCat(it.catId))*it.cantidad; },0);
   document.getElementById("total").textContent = "$"+total;
 }
 
@@ -399,11 +427,12 @@ async function guardar() {
     var filas = items.map(function(it){
       var cat=getCat(it.catId);
       var nombre=nombreCompleto(it);
-      var v=cat.precio*it.cantidad; var s=cat.costo*it.cantidad;
-      return [nombre,it.cantidad,cliente,cat.precio,v,"Pendiente",fecha,s,s,v-s,ubicacion];
+      var precio=getPrecioEfectivo(cat);
+      var v=precio*it.cantidad; var s=cat.costo*it.cantidad;
+      return [nombre,it.cantidad,cliente,precio,v,"Pendiente",fecha,s,s,v-s,ubicacion];
     });
     await fetch(SCRIPT_URL+"?data="+encodeURIComponent(JSON.stringify(filas)),{mode:"no-cors"});
-    var total=items.reduce(function(s,it){return s+getCat(it.catId).precio*it.cantidad;},0);
+    var total=items.reduce(function(s,it){return s+getPrecioEfectivo(getCat(it.catId))*it.cantidad;},0);
     document.getElementById("captura").innerHTML=
       '<div class="done-view">'+
         '<div style="font-size:70px;margin-bottom:16px">✅</div>'+

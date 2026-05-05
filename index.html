@@ -189,20 +189,23 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 
 <script>
 var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwIqpDQvGr7pstVMRWJt-yPIvRfy5EqGQRWSV9oJBTPzrSzeP3Fzbkt5RS2od0Sl949/exec";
-var FRUTAS = ["Zarzamora","Frambuesa","Blueberry chica","Blueberry grande"];
+var FRUTAS = ["Zarzamora","Frambuesa","Blueberry chica bote","Blueberry chica kg","Blueberry grande"];
 
-// Costo proveedor por bote de 500g (berries) o por pieza (elotes)
-var COSTO_PROVEEDOR = { "Zarzamora":45, "Frambuesa":45, "Blueberry chica":50 };
-// Berries que el proveedor vende POR clamshell (no por bote): $80/kg × 0.200kg = $16/clamshell
+// Costo proveedor por bote de 500g
+var COSTO_PROVEEDOR = { "Zarzamora":45, "Frambuesa":45, "Blueberry chica bote":50 };
+// Berries que el proveedor vende POR clamshell: $80/kg × 200g = $16/clamshell
 var COSTO_PROVEEDOR_CLAMSHELL = { "Blueberry grande": 16 };
+// Berries que el proveedor vende POR KG (costo exacto, sin redondeo a botes)
+var COSTO_PROVEEDOR_KG = { "Blueberry chica kg": 40 };
 var COSTO_ELOTE     = { "Elote amarillo":50, "Elote blanco":30 };
 var CAJAS_POR_BOTE = 3;  // un bote de 500g rinde 3 cajas (clamshells)
 
 var CATALOGO = [
-  { id:"zarzamora", nombre:"Zarzamora",                precio:70,  costo:45, slots:0, emoji:"🫐" },
-  { id:"frambuesa", nombre:"Frambuesa",                 precio:70,  costo:45, slots:0, emoji:"🍓" },
-  { id:"blueberry_chica",  nombre:"Blueberry chica",  precio:70, costo:50, slots:0, emoji:"🫐" },
-  { id:"blueberry_grande", nombre:"Blueberry grande", precio:70, costo:16, slots:0, emoji:"🫐" },
+  { id:"zarzamora",          nombre:"Zarzamora",           precio:70,  costo:45, slots:0, emoji:"🫐" },
+  { id:"frambuesa",          nombre:"Frambuesa",            precio:70,  costo:45, slots:0, emoji:"🍓" },
+  { id:"blueberry_chica_b",  nombre:"Blueberry chica bote",precio:70,  costo:50, slots:0, emoji:"🫐" },
+  { id:"blueberry_chica_kg", nombre:"Blueberry chica kg",  precio:70,  costo:20, slots:0, emoji:"🫐" },
+  { id:"blueberry_grande",   nombre:"Blueberry grande",    precio:70,  costo:16, slots:0, emoji:"🫐" },
   { id:"elote_am",  nombre:"Elote amarillo",            precio:100, costo:50, slots:0, emoji:"🌽" },
   { id:"elote_bl",  nombre:"Elote blanco",              precio:60,  costo:30, slots:0, emoji:"🌽" },
   { id:"ind_1",     nombre:"Individual (clamshell) 1x", precio:50,  costo:15, slots:1, emoji:"📦" },
@@ -216,7 +219,7 @@ var CATALOGO = [
 function getCat(id) { return CATALOGO.find(function(c){return c.id===id;})||CATALOGO[0]; }
 function isClamshell(id) { return id.startsWith("ind_"); }
 function isFamiliar(id)  { return id.startsWith("fam_"); }
-function isBerry(nombre) { return COSTO_PROVEEDOR.hasOwnProperty(nombre) || COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombre); }
+function isBerry(nombre) { return COSTO_PROVEEDOR.hasOwnProperty(nombre) || COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombre) || COSTO_PROVEEDOR_KG.hasOwnProperty(nombre); }
 function isElote(nombre) { return COSTO_ELOTE.hasOwnProperty(nombre); }
 
 // Frutas disponibles en el selector de fruta según tipo de contenedor.
@@ -224,8 +227,8 @@ function isElote(nombre) { return COSTO_ELOTE.hasOwnProperty(nombre); }
 // - Familiar (bote): solo Blueberry chica (ambas ubicaciones)
 function getFrutasDisponibles(catId) {
   return FRUTAS.filter(function(f) {
-    if (f === "Blueberry grande" && isFamiliar(catId))  return false;
-    if (f === "Blueberry chica"  && isClamshell(catId)) return false;
+    if (f === "Blueberry grande"     && isFamiliar(catId))  return false;
+    if (f.startsWith("Blueberry chica") && isClamshell(catId)) return false;
     return true;
   });
 }
@@ -236,7 +239,7 @@ function getFrutasDisponibles(catId) {
 function getCatalogoDisponible() {
   return CATALOGO.filter(function(c) {
     if (ubicacion === "El Sereno" && c.precio === 70 && c.slots === 0) return false;
-    if (ubicacion === "Azaleas"   && c.id === "blueberry_grande")      return false;
+    if (ubicacion === "Azaleas"   && c.id === "blueberry_grande")       return false;
     return true;
   });
 }
@@ -544,7 +547,7 @@ function parsearProducto(nombreRaw, cantidad) {
   } else if (COSTO_ELOTE.hasOwnProperty(nombreRaw)) {
     tipo = "elote";
     frutas = [nombreRaw];
-  } else if (COSTO_PROVEEDOR.hasOwnProperty(nombreRaw) || COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombreRaw)) {
+  } else if (COSTO_PROVEEDOR.hasOwnProperty(nombreRaw) || COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombreRaw) || COSTO_PROVEEDOR_KG.hasOwnProperty(nombreRaw)) {
     tipo = "fruta_suelta";
     frutas = [nombreRaw];
   }
@@ -611,25 +614,35 @@ function calcularCompraProveedor(datos) {
     }
   });
 
-  // Calcular botes/clamshells y merma para berries
+  // Calcular botes/clamshells/kg y merma para berries
   var berriesResult = {};
   var costoTotalBerries = 0;
   Object.keys(berries).forEach(function(fn) {
     var cajasNec = berries[fn].cajas;
     var esPorClamshell = COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn);
-    var costoP, botesComprar, cajasDisp, merma;
+    var esPorKg        = COSTO_PROVEEDOR_KG.hasOwnProperty(fn);
+    var costoP, botesComprar, cajasDisp, merma, kgComprar;
 
     if (esPorClamshell) {
-      // Grande: proveedor vende exactamente por clamshell, sin merma
+      // Grande: por clamshell, sin merma
       botesComprar = cajasNec;
       cajasDisp = cajasNec;
       merma = 0;
       costoP = cajasNec * COSTO_PROVEEDOR_CLAMSHELL[fn];
+      kgComprar = botesComprar * 0.2;
+    } else if (esPorKg) {
+      // Chica kg: costo exacto por kg, sin redondeo a botes
+      kgComprar = +(cajasNec * 0.5 / CAJAS_POR_BOTE).toFixed(2);
+      costoP = kgComprar * COSTO_PROVEEDOR_KG[fn];
+      botesComprar = 0;
+      cajasDisp = cajasNec;
+      merma = 0;
     } else {
       botesComprar = Math.ceil(cajasNec / CAJAS_POR_BOTE);
       cajasDisp = botesComprar * CAJAS_POR_BOTE;
       merma = cajasDisp - cajasNec;
       costoP = botesComprar * COSTO_PROVEEDOR[fn];
+      kgComprar = botesComprar * 0.5;
     }
     costoTotalBerries += costoP;
 
@@ -638,15 +651,14 @@ function calcularCompraProveedor(datos) {
       cMap[c.nombre] = (cMap[c.nombre]||0) + c.cajas;
     });
 
-    var kgComprar = esPorClamshell ? botesComprar * 0.2 : botesComprar * 0.5;
-
     berriesResult[fn] = {
       cajasNecesarias: cajasNec,
       botesComprar: botesComprar,
-      costoProveedor: costoP,
+      costoProveedor: +costoP.toFixed(2),
       cajasDisponibles: cajasDisp,
       mermaGramos: merma,
       esPorClamshell: esPorClamshell,
+      esPorKg: esPorKg,
       kgComprar: kgComprar,
       clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], gramos:e[1]}; })
     };
@@ -736,9 +748,9 @@ function renderProveedor() {
           '<div style="margin-top:5px">'+mermaHTML+'</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div class="fruta-botes-big">'+b.botesComprar+'</div>'+
-          '<div class="fruta-botes-label">'+(b.esPorClamshell ? 'clamshell'+(b.botesComprar!==1?"s":"") : 'bote'+(b.botesComprar!==1?"s":""))+'&nbsp;·&nbsp;$'+b.costoProveedor+'</div>'+
-          '<div class="fruta-botes-label" style="color:#a8e6a3;font-size:12px;margin-top:2px">'+b.kgComprar.toFixed(1)+' kg</div>'+
+          '<div class="fruta-botes-big">'+(b.esPorKg ? b.kgComprar.toFixed(2) : b.botesComprar)+'</div>'+
+          '<div class="fruta-botes-label">'+(b.esPorKg ? 'kg&nbsp;·&nbsp;$'+b.costoProveedor : b.esPorClamshell ? 'clamshell'+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;$'+b.costoProveedor : 'bote'+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;$'+b.costoProveedor)+'</div>'+
+          (b.esPorKg ? '' : '<div class="fruta-botes-label" style="color:#a8e6a3;font-size:12px;margin-top:2px">'+b.kgComprar.toFixed(1)+' kg</div>')+
         '</div>'+
       '</div>'+
       '<div class="fruta-stats-row">'+
@@ -789,8 +801,12 @@ function renderProveedor() {
   lineas.push("");
   Object.keys(B).sort().forEach(function(fn){
     var b = B[fn];
-    var unidad = b.esPorClamshell ? "clamshell" : "bote";
-    lineas.push(fn+": "+b.botesComprar+" "+unidad+(b.botesComprar!==1?"s":"")+" ("+b.kgComprar.toFixed(1)+" kg) — $"+b.costoProveedor);
+    if (b.esPorKg) {
+      lineas.push(fn+": "+b.kgComprar.toFixed(2)+" kg — $"+b.costoProveedor);
+    } else {
+      var unidad = b.esPorClamshell ? "clamshell" : "bote";
+      lineas.push(fn+": "+b.botesComprar+" "+unidad+(b.botesComprar!==1?"s":"")+" ("+b.kgComprar.toFixed(1)+" kg) — $"+b.costoProveedor);
+    }
   });
   Object.keys(E).sort().forEach(function(en){
     var e = E[en];
@@ -809,13 +825,18 @@ function renderProveedor() {
   Object.keys(B).sort().forEach(function(fn){
     var b = B[fn];
     var emoji = fn==="Frambuesa"?"🍓":"🫐";
-    var unidad = b.esPorClamshell ? "clamshell" : "bote";
-    // Fórmula de subtotal: precio/kg × kg pedidos = total
     var precioKg = Math.round(b.costoProveedor / b.kgComprar);
-    var formula = precioKg+' × '+b.kgComprar.toFixed(1)+' kg = $'+b.costoProveedor;
+    var formula = precioKg+' × '+b.kgComprar.toFixed(2)+' kg = $'+b.costoProveedor;
+    var cantLabel;
+    if (b.esPorKg) {
+      cantLabel = b.kgComprar.toFixed(2)+' kg';
+    } else {
+      var unidad = b.esPorClamshell ? "clamshell" : "bote";
+      cantLabel = b.botesComprar+' '+unidad+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;'+b.kgComprar.toFixed(1)+' kg';
+    }
     lineasHTML += '<div class="pedido-line" style="flex-direction:column;align-items:stretch;gap:3px">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline">'+
-        '<span class="pedido-fruta">'+emoji+' '+fn+'<span class="pedido-cant">'+b.botesComprar+' '+unidad+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;'+b.kgComprar.toFixed(1)+' kg</span></span>'+
+        '<span class="pedido-fruta">'+emoji+' '+fn+'<span class="pedido-cant">'+cantLabel+'</span></span>'+
         '<span class="pedido-costo">$'+b.costoProveedor+'</span>'+
       '</div>'+
       '<div style="font-size:11px;color:#6b9e6b;letter-spacing:0.3px">'+formula+'</div>'+

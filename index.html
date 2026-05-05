@@ -239,7 +239,8 @@ function getFrutasDisponibles(catId) {
 function getCatalogoDisponible() {
   return CATALOGO.filter(function(c) {
     if (ubicacion === "El Sereno" && c.precio === 70 && c.slots === 0) return false;
-    if (ubicacion === "Azaleas"   && c.id === "blueberry_grande")       return false;
+    if (ubicacion === "Azaleas"   && c.id === "blueberry_grande")        return false;
+    if (ubicacion === "Azaleas"   && c.id === "blueberry_chica_kg")     return false;
     return true;
   });
 }

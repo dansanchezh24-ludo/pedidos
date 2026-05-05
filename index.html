@@ -845,12 +845,15 @@ function renderProveedor() {
   lineas.push("");
   Object.keys(B).sort().forEach(function(fn){
     var b = B[fn];
+    var precioKgCopy = Math.round(b.costoProveedor / b.kgComprar);
+    var formulaCopy = precioKgCopy+" × "+b.kgComprar.toFixed(2)+" kg = $"+b.costoProveedor;
     if (b.esPorKg) {
       lineas.push(fn+": "+b.kgComprar.toFixed(2)+" kg — $"+b.costoProveedor);
     } else {
       var unidad = b.esPorClamshell ? "clamshell" : "bote";
       lineas.push(fn+": "+b.botesComprar+" "+unidad+(b.botesComprar!==1?"s":"")+" ("+b.kgComprar.toFixed(1)+" kg) — $"+b.costoProveedor);
     }
+    lineas.push("  "+formulaCopy);
   });
   Object.keys(E).sort().forEach(function(en){
     var e = E[en];

@@ -429,7 +429,7 @@ function fmtFecha(f) {
 
 // ─── Resumen ───
 async function cargarResumen() {
-  document.getElementById("resumenCards").innerHTML="<p style='text-align:center;color:#6b9e6b;padding:30px'>⏳ Cargando...</p>";
+  document.getElementById("resumenCards").innerHTML="<p style='text-align:center;color:#6b9e6b;padding:30px'>⏳ Cargando fechas...</p>";
   try {
     var res=await fetch(SCRIPT_URL+"?action=read");
     var data=await res.json();
@@ -438,7 +438,7 @@ async function cargarResumen() {
     resumenData.forEach(function(r){fechas[fmtFecha(r[6])]=true;});
     var sel=document.getElementById("fechaFiltro");
     var cur=sel.value;
-    sel.innerHTML='<option value="">— Todas las fechas —</option>';
+    sel.innerHTML='<option value="">— Selecciona una fecha —</option>';
     Object.keys(fechas).sort().reverse().forEach(function(f){
       var o=document.createElement("option"); o.value=f; o.textContent=f;
       if(f===cur) o.selected=true; sel.appendChild(o);
@@ -451,7 +451,14 @@ async function cargarResumen() {
 
 function renderResumen() {
   var filtro=document.getElementById("fechaFiltro").value;
-  var datos=resumenData.filter(function(r){return !filtro||fmtFecha(r[6])===filtro;});
+  if (!filtro) {
+    document.getElementById("resumenCards").innerHTML="<p style='text-align:center;color:#5a8a5a;padding:40px'>📅 Selecciona una fecha para ver los pedidos</p>";
+    document.getElementById("granTotal").textContent="—";
+    document.getElementById("numClientes").textContent="—";
+    document.getElementById("numRegistros").textContent="—";
+    return;
+  }
+  var datos=resumenData.filter(function(r){return fmtFecha(r[6])===filtro;});
   var byCliente={};
   datos.forEach(function(r){
     var c=r[2]||"?"; var t=parseFloat(r[4])||0;
@@ -498,7 +505,7 @@ function renderResumen() {
 
 // ─── PROVEEDOR ───
 async function cargarProveedor() {
-  document.getElementById("proveedorResumen").innerHTML="<p style='text-align:center;color:#6b9e6b;padding:30px'>⏳ Cargando...</p>";
+  document.getElementById("proveedorResumen").innerHTML="<p style='text-align:center;color:#6b9e6b;padding:30px'>⏳ Cargando fechas...</p>";
   try {
     var res=await fetch(SCRIPT_URL+"?action=read");
     var data=await res.json();
@@ -507,7 +514,7 @@ async function cargarProveedor() {
     proveedorData.forEach(function(r){fechas[fmtFecha(r[6])]=true;});
     var sel=document.getElementById("fechaFiltroP");
     var cur=sel.value;
-    sel.innerHTML='<option value="">— Todas las fechas —</option>';
+    sel.innerHTML='<option value="">— Selecciona una fecha —</option>';
     Object.keys(fechas).sort().reverse().forEach(function(f){
       var o=document.createElement("option"); o.value=f; o.textContent=f;
       if(f===cur) o.selected=true; sel.appendChild(o);
@@ -698,9 +705,15 @@ function calcularCompraProveedor(datos) {
 
 function renderProveedor() {
   var filtro = document.getElementById("fechaFiltroP").value;
-  var datos  = proveedorData.filter(function(r){ return !filtro || fmtFecha(r[6])===filtro; });
   var container = document.getElementById("proveedorResumen");
   container.innerHTML = "";
+
+  if (!filtro) {
+    container.innerHTML = "<p style='text-align:center;color:#5a8a5a;padding:40px'>📅 Selecciona una fecha para ver el pedido al proveedor</p>";
+    return;
+  }
+
+  var datos = proveedorData.filter(function(r){ return fmtFecha(r[6])===filtro; });
 
   if (datos.length === 0) {
     container.innerHTML = "<p style='text-align:center;color:#5a8a5a;padding:40px'>No hay pedidos para esta fecha</p>";

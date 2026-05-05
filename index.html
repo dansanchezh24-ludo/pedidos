@@ -802,8 +802,8 @@ function renderProveedor() {
       labelMerma   = "MERMA"; valMerma = b.mermaGramos+" clamshell"+(b.mermaGramos!==1?"s":"");
     } else {
       labelPedidas = "BOTES PEDIDOS"; valPedidas = b.botesComprar+" bote"+(b.botesComprar!==1?"s":"");
-      labelDisp    = "DISPONIBLES"; valDisp = Math.floor(b.cajasDisponibles/3)+" bote"+(Math.floor(b.cajasDisponibles/3)!==1?"s":"");
-      labelMerma   = "MERMA"; valMerma = b.mermaGramos+" cj";
+      labelDisp    = "VENDIDOS"; valDisp = b.cajasNecesarias+" clamshell"+(b.cajasNecesarias!==1?"s":"");
+      labelMerma   = "MERMA"; valMerma = b.mermaGramos+" clamshell"+(b.mermaGramos!==1?"s":"");
     }
 
     var card = document.createElement("div");

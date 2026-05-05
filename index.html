@@ -810,17 +810,9 @@ function renderProveedor() {
     var b = B[fn];
     var emoji = fn==="Frambuesa"?"🍓":"🫐";
     var unidad = b.esPorClamshell ? "clamshell" : "bote";
-    // Fórmula de subtotal
-    var formula;
-    if (b.esPorClamshell) {
-      var precioKg   = Math.round(b.costoProveedor / b.kgComprar);
-      var gramosCj   = Math.round(b.kgComprar / b.botesComprar * 1000);
-      var precioCj   = COSTO_PROVEEDOR_CLAMSHELL[fn];
-      formula = '$'+precioKg+'/kg × '+gramosCj+'g = $'+precioCj+'/cj × '+b.botesComprar+' cj = $'+b.costoProveedor;
-    } else {
-      var precioBote = COSTO_PROVEEDOR[fn];
-      formula = '$'+precioBote+'/bote × '+b.botesComprar+' '+(b.botesComprar!==1?'botes':'bote')+' = $'+b.costoProveedor;
-    }
+    // Fórmula de subtotal: precio/kg × kg pedidos = total
+    var precioKg = Math.round(b.costoProveedor / b.kgComprar);
+    var formula = precioKg+' × '+b.kgComprar.toFixed(1)+' kg = $'+b.costoProveedor;
     lineasHTML += '<div class="pedido-line" style="flex-direction:column;align-items:stretch;gap:3px">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline">'+
         '<span class="pedido-fruta">'+emoji+' '+fn+'<span class="pedido-cant">'+b.botesComprar+' '+unidad+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;'+b.kgComprar.toFixed(1)+' kg</span></span>'+

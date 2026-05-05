@@ -638,6 +638,8 @@ function calcularCompraProveedor(datos) {
       cMap[c.nombre] = (cMap[c.nombre]||0) + c.cajas;
     });
 
+    var kgComprar = esPorClamshell ? botesComprar * 0.2 : botesComprar * 0.5;
+
     berriesResult[fn] = {
       cajasNecesarias: cajasNec,
       botesComprar: botesComprar,
@@ -645,6 +647,7 @@ function calcularCompraProveedor(datos) {
       cajasDisponibles: cajasDisp,
       mermaGramos: merma,
       esPorClamshell: esPorClamshell,
+      kgComprar: kgComprar,
       clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], gramos:e[1]}; })
     };
   });
@@ -735,6 +738,7 @@ function renderProveedor() {
         '<div style="text-align:right">'+
           '<div class="fruta-botes-big">'+b.botesComprar+'</div>'+
           '<div class="fruta-botes-label">'+(b.esPorClamshell ? 'clamshell'+(b.botesComprar!==1?"s":"") : 'bote'+(b.botesComprar!==1?"s":""))+'&nbsp;·&nbsp;$'+b.costoProveedor+'</div>'+
+          '<div class="fruta-botes-label" style="color:#a8e6a3;font-size:12px;margin-top:2px">'+b.kgComprar.toFixed(1)+' kg</div>'+
         '</div>'+
       '</div>'+
       '<div class="fruta-stats-row">'+
@@ -786,7 +790,7 @@ function renderProveedor() {
   Object.keys(B).sort().forEach(function(fn){
     var b = B[fn];
     var unidad = b.esPorClamshell ? "clamshell" : "bote";
-    lineas.push(fn+": "+b.botesComprar+" "+unidad+(b.botesComprar!==1?"s":"")+" — $"+b.costoProveedor);
+    lineas.push(fn+": "+b.botesComprar+" "+unidad+(b.botesComprar!==1?"s":"")+" ("+b.kgComprar.toFixed(1)+" kg) — $"+b.costoProveedor);
   });
   Object.keys(E).sort().forEach(function(en){
     var e = E[en];
@@ -807,7 +811,7 @@ function renderProveedor() {
     var emoji = fn==="Frambuesa"?"🍓":"🫐";
     var unidad = b.esPorClamshell ? "clamshell" : "bote";
     lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-fruta">'+emoji+' '+fn+'<span class="pedido-cant">'+b.botesComprar+' '+unidad+(b.botesComprar!==1?"s":"")+'</span></span>'+
+      '<span class="pedido-fruta">'+emoji+' '+fn+'<span class="pedido-cant">'+b.botesComprar+' '+unidad+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;'+b.kgComprar.toFixed(1)+' kg</span></span>'+
       '<span class="pedido-costo">$'+b.costoProveedor+'</span>'+
     '</div>';
   });

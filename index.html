@@ -768,20 +768,43 @@ function renderProveedor() {
     var emoji = fn==="Frambuesa" ? "🍓" : "🫐";
     var maxGramos = Math.max.apply(null, b.clienteDetalle.map(function(c){return c.gramos;}));
 
+    // unidad según tipo de berry
+    var unidadSing = b.esPorClamshell ? "clamshell" : "bote";
+    var unidadPlur = b.esPorClamshell ? "clamshells" : "botes";
+    var unidadMerma = b.esPorClamshell ? "clamshell" : "caja";
+    var unidadMermaP = b.esPorClamshell ? "clamshells" : "cajas";
+
     // merma pill
     var mermaHTML = b.mermaGramos === 0
       ? '<span class="merma-pill merma-ok">✅ Sin merma</span>'
-      : '<span class="merma-pill merma-warn">⚠️ '+b.mermaGramos+' caja'+(b.mermaGramos!==1?"s":"")+'</span>';
+      : '<span class="merma-pill merma-warn">⚠️ '+b.mermaGramos+' '+(b.mermaGramos!==1?unidadMermaP:unidadMerma)+'</span>';
 
     // barras de clientes
     var barras = b.clienteDetalle.map(function(cd) {
       var pct = maxGramos > 0 ? Math.round(cd.gramos/maxGramos*100) : 0;
+      var cdLabel = b.esPorKg ? cd.gramos+' cj' : cd.gramos+' '+(cd.gramos!==1?unidadPlur:unidadSing);
       return '<div class="cliente-bar-row">'+
         '<span class="cliente-bar-name">'+cd.nombre+'</span>'+
         '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%"></div></div>'+
-        '<span class="cliente-bar-grams">'+cd.gramos+' cj</span>'+
+        '<span class="cliente-bar-grams">'+cdLabel+'</span>'+
       '</div>';
     }).join("");
+
+    // stats row labels y valores según tipo
+    var labelPedidas, valPedidas, labelDisp, valDisp, labelMerma, valMerma;
+    if (b.esPorKg) {
+      labelPedidas = "CAJAS PEDIDAS"; valPedidas = b.cajasNecesarias+" cj";
+      labelDisp    = "CAJAS DISPONIBLES"; valDisp = b.cajasDisponibles+" cj";
+      labelMerma   = "MERMA"; valMerma = b.mermaGramos+" cj";
+    } else if (b.esPorClamshell) {
+      labelPedidas = "CLAMSHELLS PEDIDOS"; valPedidas = b.botesComprar+" clamshell"+(b.botesComprar!==1?"s":"");
+      labelDisp    = "DISPONIBLES"; valDisp = b.cajasDisponibles+" clamshell"+(b.cajasDisponibles!==1?"s":"");
+      labelMerma   = "MERMA"; valMerma = b.mermaGramos+" clamshell"+(b.mermaGramos!==1?"s":"");
+    } else {
+      labelPedidas = "BOTES PEDIDOS"; valPedidas = b.botesComprar+" bote"+(b.botesComprar!==1?"s":"");
+      labelDisp    = "DISPONIBLES"; valDisp = Math.floor(b.cajasDisponibles/3)+" bote"+(Math.floor(b.cajasDisponibles/3)!==1?"s":"");
+      labelMerma   = "MERMA"; valMerma = b.mermaGramos+" cj";
+    }
 
     var card = document.createElement("div");
     card.className = "fruta-card";
@@ -798,9 +821,9 @@ function renderProveedor() {
         '</div>'+
       '</div>'+
       '<div class="fruta-stats-row">'+
-        '<div class="fstat"><div class="fstat-label">CAJAS PEDIDAS</div><div class="fstat-val">'+b.cajasNecesarias+' cj</div></div>'+
-        '<div class="fstat"><div class="fstat-label">CAJAS DISPONIBLES</div><div class="fstat-val">'+b.cajasDisponibles+' cj</div></div>'+
-        '<div class="fstat"><div class="fstat-label">MERMA</div><div class="fstat-val '+(b.mermaGramos>0?'naranja':'')+'">'+b.mermaGramos+' cj</div></div>'+
+        '<div class="fstat"><div class="fstat-label">'+labelPedidas+'</div><div class="fstat-val">'+valPedidas+'</div></div>'+
+        '<div class="fstat"><div class="fstat-label">'+labelDisp+'</div><div class="fstat-val">'+valDisp+'</div></div>'+
+        '<div class="fstat"><div class="fstat-label">'+labelMerma+'</div><div class="fstat-val '+(b.mermaGramos>0?'naranja':'')+'">'+valMerma+'</div></div>'+
       '</div>'+
       '<div class="clientes-block">'+
         '<div class="clientes-block-title">DISTRIBUCIÓN POR CLIENTE</div>'+

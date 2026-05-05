@@ -810,9 +810,23 @@ function renderProveedor() {
     var b = B[fn];
     var emoji = fn==="Frambuesa"?"🍓":"🫐";
     var unidad = b.esPorClamshell ? "clamshell" : "bote";
-    lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-fruta">'+emoji+' '+fn+'<span class="pedido-cant">'+b.botesComprar+' '+unidad+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;'+b.kgComprar.toFixed(1)+' kg</span></span>'+
-      '<span class="pedido-costo">$'+b.costoProveedor+'</span>'+
+    // Fórmula de subtotal
+    var formula;
+    if (b.esPorClamshell) {
+      var precioKg   = Math.round(b.costoProveedor / b.kgComprar);
+      var gramosCj   = Math.round(b.kgComprar / b.botesComprar * 1000);
+      var precioCj   = COSTO_PROVEEDOR_CLAMSHELL[fn];
+      formula = '$'+precioKg+'/kg × '+gramosCj+'g = $'+precioCj+'/cj × '+b.botesComprar+' cj = $'+b.costoProveedor;
+    } else {
+      var precioBote = COSTO_PROVEEDOR[fn];
+      formula = '$'+precioBote+'/bote × '+b.botesComprar+' '+(b.botesComprar!==1?'botes':'bote')+' = $'+b.costoProveedor;
+    }
+    lineasHTML += '<div class="pedido-line" style="flex-direction:column;align-items:stretch;gap:3px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline">'+
+        '<span class="pedido-fruta">'+emoji+' '+fn+'<span class="pedido-cant">'+b.botesComprar+' '+unidad+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;'+b.kgComprar.toFixed(1)+' kg</span></span>'+
+        '<span class="pedido-costo">$'+b.costoProveedor+'</span>'+
+      '</div>'+
+      '<div style="font-size:11px;color:#6b9e6b;letter-spacing:0.3px">'+formula+'</div>'+
     '</div>';
   });
   Object.keys(E).sort().forEach(function(en){

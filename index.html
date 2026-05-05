@@ -624,30 +624,37 @@ function calcularCompraProveedor(datos) {
 
     } else if (p.tipo === "fruta_suelta") {
       var fn = p.frutas[0];
-      if (!berries[fn]) berries[fn] = { cajas:0, clientes:[] };
-      // Grande: proveedor vende por clamshell, 1 unidad = 1 clamshell
-      var cajasAporte = COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn) ? qty : qty * CAJAS_POR_BOTE;
-      berries[fn].cajas += cajasAporte;
-      berries[fn].clientes.push({ nombre: cliente, cajas: cajasAporte });
+      if (!berries[fn]) berries[fn] = { cajas:0, cajasF:0, cajasC:0, clientes:[] };
+      if (COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn)) {
+        berries[fn].cajas += qty;
+        berries[fn].cajasC += qty;
+        berries[fn].clientes.push({ nombre: cliente, cajasF: 0, cajasC: qty });
+      } else {
+        var cajasAporte = qty * CAJAS_POR_BOTE;
+        berries[fn].cajas += cajasAporte;
+        berries[fn].cajasF += cajasAporte;
+        berries[fn].clientes.push({ nombre: cliente, cajasF: cajasAporte, cajasC: 0 });
+      }
 
     } else if (p.tipo === "clamshell") {
       // Cada clamshell = 1 caja por fruta seleccionada
       p.frutas.forEach(function(fn) {
         if (!fn || !isBerry(fn)) return;
-        if (!berries[fn]) berries[fn] = { cajas:0, clientes:[] };
+        if (!berries[fn]) berries[fn] = { cajas:0, cajasF:0, cajasC:0, clientes:[] };
         berries[fn].cajas += qty;
-        berries[fn].clientes.push({ nombre: cliente, cajas: qty });
+        berries[fn].cajasC += qty;
+        berries[fn].clientes.push({ nombre: cliente, cajasF: 0, cajasC: qty });
       });
 
     } else if (p.tipo === "familiar") {
       // Bote familiar = 1 bote completo de proveedor = 3 cajas por fruta
       p.frutas.forEach(function(fn) {
         if (!fn || !isBerry(fn)) return;
-        if (!berries[fn]) berries[fn] = { cajas:0, clientes:[] };
-        // Grande en bote familiar: igual cuenta como CAJAS_POR_BOTE clamshells
+        if (!berries[fn]) berries[fn] = { cajas:0, cajasF:0, cajasC:0, clientes:[] };
         var cajasAporte = qty * CAJAS_POR_BOTE;
         berries[fn].cajas += cajasAporte;
-        berries[fn].clientes.push({ nombre: cliente, cajas: cajasAporte });
+        berries[fn].cajasF += cajasAporte;
+        berries[fn].clientes.push({ nombre: cliente, cajasF: cajasAporte, cajasC: 0 });
       });
     }
   });
@@ -686,8 +693,13 @@ function calcularCompraProveedor(datos) {
 
     var cMap = {};
     berries[fn].clientes.forEach(function(c){
-      cMap[c.nombre] = (cMap[c.nombre]||0) + c.cajas;
+      if (!cMap[c.nombre]) cMap[c.nombre] = { cajasF:0, cajasC:0 };
+      cMap[c.nombre].cajasF += c.cajasF;
+      cMap[c.nombre].cajasC += c.cajasC;
     });
+
+    var totalBotesVendidos      = Math.floor((berries[fn].cajasF||0) / CAJAS_POR_BOTE);
+    var totalClamshellsVendidos = berries[fn].cajasC || 0;
 
     berriesResult[fn] = {
       cajasNecesarias: cajasNec,
@@ -698,7 +710,16 @@ function calcularCompraProveedor(datos) {
       esPorClamshell: esPorClamshell,
       esPorKg: esPorKg,
       kgComprar: kgComprar,
-      clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], gramos:e[1]}; })
+      botesVendidos: totalBotesVendidos,
+      clamshellsVendidos: totalClamshellsVendidos,
+      clienteDetalle: Object.entries(cMap).map(function(e){
+        return {
+          nombre: e[0],
+          gramos: e[1].cajasF + e[1].cajasC,
+          botesVendidos: Math.floor(e[1].cajasF / CAJAS_POR_BOTE),
+          clamshellsVendidos: e[1].cajasC
+        };
+      })
     };
   });
 
@@ -782,11 +803,17 @@ function renderProveedor() {
     // barras de clientes
     var barras = b.clienteDetalle.map(function(cd) {
       var pct = maxGramos > 0 ? Math.round(cd.gramos/maxGramos*100) : 0;
-      var cdLabel = b.esPorKg ? cd.gramos+' cj' : cd.gramos+' '+(cd.gramos!==1?unidadPlur:unidadSing);
+      var cdParts = [];
+      if (b.esPorKg) {
+        cdParts.push(cd.gramos+' cj');
+      } else {
+        if (cd.botesVendidos > 0) cdParts.push(cd.botesVendidos+' bote'+(cd.botesVendidos!==1?'s':''));
+        if (cd.clamshellsVendidos > 0) cdParts.push(cd.clamshellsVendidos+' clamshell'+(cd.clamshellsVendidos!==1?'s':''));
+      }
       return '<div class="cliente-bar-row">'+
         '<span class="cliente-bar-name">'+cd.nombre+'</span>'+
         '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%"></div></div>'+
-        '<span class="cliente-bar-grams">'+cdLabel+'</span>'+
+        '<span class="cliente-bar-grams">'+(cdParts.join(' + ')||'0')+'</span>'+
       '</div>';
     }).join("");
 
@@ -801,8 +828,11 @@ function renderProveedor() {
       labelDisp    = "DISPONIBLES"; valDisp = b.cajasDisponibles+" clamshell"+(b.cajasDisponibles!==1?"s":"");
       labelMerma   = "MERMA"; valMerma = b.mermaGramos+" clamshell"+(b.mermaGramos!==1?"s":"");
     } else {
+      var vendParts = [];
+      if (b.botesVendidos > 0) vendParts.push(b.botesVendidos+' bote'+(b.botesVendidos!==1?'s':''));
+      if (b.clamshellsVendidos > 0) vendParts.push(b.clamshellsVendidos+' clamshell'+(b.clamshellsVendidos!==1?'s':''));
       labelPedidas = "BOTES PEDIDOS"; valPedidas = b.botesComprar+" bote"+(b.botesComprar!==1?"s":"");
-      labelDisp    = "VENDIDOS"; valDisp = b.cajasNecesarias+" clamshell"+(b.cajasNecesarias!==1?"s":"");
+      labelDisp    = "VENDIDOS"; valDisp = vendParts.join(' + ') || '0';
       labelMerma   = "MERMA"; valMerma = b.mermaGramos+" clamshell"+(b.mermaGramos!==1?"s":"");
     }
 

@@ -227,7 +227,8 @@ function isElote(nombre) { return COSTO_ELOTE.hasOwnProperty(nombre); }
 // - Familiar (bote): solo Blueberry chica (ambas ubicaciones)
 function getFrutasDisponibles(catId) {
   return FRUTAS.filter(function(f) {
-    if (f === "Blueberry grande"     && isFamiliar(catId))  return false;
+    if (f === "Blueberry chica kg")                            return false;
+    if (f === "Blueberry grande"        && isFamiliar(catId))  return false;
     if (f.startsWith("Blueberry chica") && isClamshell(catId)) return false;
     return true;
   });

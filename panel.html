@@ -172,16 +172,56 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 <script>
 var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwIqpDQvGr7pstVMRWJt-yPIvRfy5EqGQRWSV9oJBTPzrSzeP3Fzbkt5RS2od0Sl949/exec";
 
-// Costo proveedor por bote de 500g
-var COSTO_PROVEEDOR = { "Zarzamora":45, "Frambuesa":45, "Blueberry":50, "Blueberry chica bote":50 };
+// ═══════════════════════════════════════════
+// HISTORIAL DE COSTOS DEL PROVEEDOR (vigencias)
+// ═══════════════════════════════════════════
+// Cada fruta/producto tiene una LISTA de costos, cada uno con la fecha en que
+// entró en vigor ("desde", formato "YYYY-MM-DD"). Para calcular la utilidad de
+// UN PEDIDO se usa el costo que estaba vigente en SU fecha de entrega (la entrada
+// más reciente cuyo "desde" sea ≤ la fecha del pedido). Así:
+//   - Pedidos de antes de un cambio de precio → se calculan con el costo viejo
+//   - Pedidos de la fecha del cambio en adelante → se calculan con el costo nuevo
+// y los márgenes/utilidad que muestra el panel quedan correctos sin importar
+// cuándo cambien los precios del proveedor.
+//
+// 👉 Para registrar un nuevo aumento/cambio de costo: agrega un objeto al FINAL
+//    de la lista correspondiente con la fecha en que empieza a aplicar y el costo nuevo.
+//    No edites ni borres las entradas viejas — son las que mantienen correctos
+//    los reportes de fechas pasadas.
+
+// Costo por bote de 500g
+var HIST_COSTO_PROVEEDOR = {
+  "Zarzamora":            [ {desde:"2000-01-01", costo:45}, {desde:"2026-06-08", costo:60} ],
+  "Frambuesa":            [ {desde:"2000-01-01", costo:45}, {desde:"2026-06-08", costo:60} ],
+  "Blueberry":            [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
+  "Blueberry chica bote": [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ]
+};
 // Berries que el proveedor vende POR clamshell: $80/kg × 200g = $16/clamshell
-var COSTO_PROVEEDOR_CLAMSHELL = { "Blueberry grande": 16 };
+var HIST_COSTO_PROVEEDOR_CLAMSHELL = {
+  "Blueberry grande": [ {desde:"2000-01-01", costo:16} ]
+};
 // Berries que el proveedor vende POR KG (costo exacto, sin redondeo a botes)
-var COSTO_PROVEEDOR_KG = { "Blueberry chica kg": 40 };
-var COSTO_ELOTE     = { "Elote amarillo":50, "Elote blanco":30 };
+var HIST_COSTO_PROVEEDOR_KG = {
+  "Blueberry chica kg": [ {desde:"2000-01-01", costo:40} ]
+};
+var HIST_COSTO_ELOTE = {
+  "Elote amarillo": [ {desde:"2000-01-01", costo:50} ],
+  "Elote blanco":   [ {desde:"2000-01-01", costo:30} ]
+};
 var CAJAS_POR_BOTE = 3;  // un bote de 500g rinde 3 cajas (clamshells)
 
-function isBerry(nombre) { return COSTO_PROVEEDOR.hasOwnProperty(nombre) || COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombre) || COSTO_PROVEEDOR_KG.hasOwnProperty(nombre); }
+// Devuelve { costo, desde } — el costo vigente en una fecha (YYYY-MM-DD) dada,
+// es decir la entrada más reciente cuyo "desde" sea ≤ esa fecha.
+function costoVigente(historial, fecha) {
+  if (!historial || !historial.length) return { costo:0, desde:null };
+  var activo = historial[0];
+  for (var i=0; i<historial.length; i++) {
+    if (historial[i].desde <= fecha) activo = historial[i]; else break;
+  }
+  return { costo: activo.costo, desde: activo.desde };
+}
+
+function isBerry(nombre) { return HIST_COSTO_PROVEEDOR.hasOwnProperty(nombre) || HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombre) || HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(nombre); }
 
 var resumenData = [];
 var proveedorData = [];
@@ -265,7 +305,7 @@ function calcularKPIsGlobal(datos) {
 
   var ventasTotales = 0, pagoProveedorTotal = 0;
   Object.keys(porFecha).forEach(function(f){
-    var c = calcularCompraProveedor(porFecha[f]);
+    var c = calcularCompraProveedor(porFecha[f], f);
     ventasTotales += c.ventaTotal;
     pagoProveedorTotal += c.costoTotalProveedor;
   });
@@ -482,10 +522,10 @@ function parsearProducto(nombreRaw, cantidad) {
     if (partes.length > 1) {
       frutas = partes[1].trim().split("+").map(function(f){ return f.trim(); });
     }
-  } else if (COSTO_ELOTE.hasOwnProperty(nombreRaw)) {
+  } else if (HIST_COSTO_ELOTE.hasOwnProperty(nombreRaw)) {
     tipo = "elote";
     frutas = [nombreRaw];
-  } else if (COSTO_PROVEEDOR.hasOwnProperty(nombreRaw) || COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombreRaw) || COSTO_PROVEEDOR_KG.hasOwnProperty(nombreRaw)) {
+  } else if (HIST_COSTO_PROVEEDOR.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(nombreRaw)) {
     tipo = "fruta_suelta";
     frutas = [nombreRaw];
   }
@@ -501,7 +541,11 @@ function parsearProducto(nombreRaw, cantidad) {
  *   elotes:  { [nombre]: { piezas, costoUnitario, costoTotal, clienteDetalle } }
  *   ventaTotal, costoTotalProveedor, gananciaNeta
  */
-function calcularCompraProveedor(datos) {
+function calcularCompraProveedor(datos, fecha) {
+  // La fecha determina qué costo de proveedor aplica (ver HIST_COSTO_PROVEEDOR*
+  // arriba). Si no se pasa explícitamente, se toma de la fecha de entrega del
+  // primer pedido del lote (todas las llamadas agrupan por una sola fecha).
+  fecha = fecha || fmtFecha(datos[0] && datos[0][6]);
   var berries = {};   // fruta -> { cajas, clientes: [{nombre, cajas}] }
   var elotes  = {};
   var ventaTotal = 0;
@@ -525,7 +569,7 @@ function calcularCompraProveedor(datos) {
     } else if (p.tipo === "fruta_suelta") {
       var fn = p.frutas[0];
       if (!berries[fn]) berries[fn] = { cajas:0, cajasF:0, cajasC:0, clientes:[] };
-      if (COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn)) {
+      if (HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn)) {
         berries[fn].cajas += qty;
         berries[fn].cajasC += qty;
         berries[fn].clientes.push({ nombre: cliente, cajasF: 0, cajasC: qty });
@@ -562,27 +606,30 @@ function calcularCompraProveedor(datos) {
   var costoTotalBerries = 0;
   Object.keys(berries).forEach(function(fn) {
     var cajasNec = berries[fn].cajas;
-    var esPorClamshell = COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn);
-    var esPorKg        = COSTO_PROVEEDOR_KG.hasOwnProperty(fn);
-    var costoP, botesComprar, cajasDisp, merma, kgComprar;
+    var esPorClamshell = HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn);
+    var esPorKg        = HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(fn);
+    var costoP, botesComprar, cajasDisp, merma, kgComprar, vig;
 
     if (esPorClamshell) {
+      vig = costoVigente(HIST_COSTO_PROVEEDOR_CLAMSHELL[fn], fecha);
       botesComprar = cajasNec;
       cajasDisp = cajasNec;
       merma = 0;
-      costoP = cajasNec * COSTO_PROVEEDOR_CLAMSHELL[fn];
+      costoP = cajasNec * vig.costo;
       kgComprar = botesComprar * 0.2;
     } else if (esPorKg) {
+      vig = costoVigente(HIST_COSTO_PROVEEDOR_KG[fn], fecha);
       kgComprar = +(cajasNec * 0.5 / CAJAS_POR_BOTE).toFixed(2);
-      costoP = kgComprar * COSTO_PROVEEDOR_KG[fn];
+      costoP = kgComprar * vig.costo;
       botesComprar = 0;
       cajasDisp = cajasNec;
       merma = 0;
     } else {
+      vig = costoVigente(HIST_COSTO_PROVEEDOR[fn], fecha);
       botesComprar = Math.ceil(cajasNec / CAJAS_POR_BOTE);
       cajasDisp = botesComprar * CAJAS_POR_BOTE;
       merma = cajasDisp - cajasNec;
-      costoP = botesComprar * COSTO_PROVEEDOR[fn];
+      costoP = botesComprar * vig.costo;
       kgComprar = botesComprar * 0.5;
     }
     costoTotalBerries += costoP;
@@ -601,6 +648,8 @@ function calcularCompraProveedor(datos) {
       cajasNecesarias: cajasNec,
       botesComprar: botesComprar,
       costoProveedor: +costoP.toFixed(2),
+      costoUnitario: vig.costo,
+      costoVigenteDesde: vig.desde,
       cajasDisponibles: cajasDisp,
       mermaGramos: merma,
       esPorClamshell: esPorClamshell,
@@ -623,7 +672,8 @@ function calcularCompraProveedor(datos) {
   var costoTotalElotes = 0;
   Object.keys(elotes).forEach(function(en) {
     var piezas = elotes[en].piezas;
-    var costoU = COSTO_ELOTE[en] || 0;
+    var vigE = costoVigente(HIST_COSTO_ELOTE[en], fecha);
+    var costoU = vigE.costo || 0;
     var costoT = piezas * costoU;
     costoTotalElotes += costoT;
     var cMap = {};
@@ -631,6 +681,7 @@ function calcularCompraProveedor(datos) {
     elotesResult[en] = {
       piezas: piezas,
       costoUnitario: costoU,
+      costoVigenteDesde: vigE.desde,
       costoTotal: costoT,
       clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], piezas:e[1]}; })
     };
@@ -665,7 +716,7 @@ function renderProveedor() {
     return;
   }
 
-  var calc = calcularCompraProveedor(datos);
+  var calc = calcularCompraProveedor(datos, filtro);
   var B = calc.berries, E = calc.elotes;
 
   // ── Resumen superior ──
@@ -739,6 +790,7 @@ function renderProveedor() {
           '<div class="fruta-botes-big">'+(b.esPorKg ? b.kgComprar.toFixed(2) : b.botesComprar)+'</div>'+
           '<div class="fruta-botes-label">'+(b.esPorKg ? 'kg&nbsp;·&nbsp;$'+b.costoProveedor : b.esPorClamshell ? 'clamshell'+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;$'+b.costoProveedor : 'bote'+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;$'+b.costoProveedor)+'</div>'+
           (b.esPorKg ? '' : '<div class="fruta-botes-label" style="color:#a8e6a3;font-size:12px;margin-top:2px">'+b.kgComprar.toFixed(1)+' kg</div>')+
+          '<div class="fruta-botes-label" style="color:#6b9e6b;font-size:10px;margin-top:3px">costo $'+b.costoUnitario+(b.esPorKg?'/kg':b.esPorClamshell?'/clamshell':'/bote')+' · vigente desde '+b.costoVigenteDesde+'</div>'+
         '</div>'+
       '</div>'+
       '<div class="fruta-stats-row">'+
@@ -773,6 +825,7 @@ function renderProveedor() {
         '<div style="text-align:right">'+
           '<div style="color:#ffcc02;font-weight:bold">'+e.piezas+' pz × $'+e.costoUnitario+'</div>'+
           '<div style="color:#a8e6a3;font-size:13px">= $'+e.costoTotal+'</div>'+
+          '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+e.costoVigenteDesde+'</div>'+
         '</div>';
       ecard.appendChild(erow);
     });

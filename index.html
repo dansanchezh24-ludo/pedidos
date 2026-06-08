@@ -111,10 +111,14 @@ var CATALOGO = [
   { id:"fam_1",     nombre:"Familiar (bote) 1x",        precio:120, costo:50, slots:1, emoji:"🪣" },
   { id:"fam_2",     nombre:"Familiar (bote) 2x",        precio:220, costo:100,slots:2, emoji:"🪣" },
   { id:"fam_3",     nombre:"Familiar (bote) 3x",        precio:320, costo:150,slots:3, emoji:"🪣" },
-  { id:"ludo_select", nombre:"Ludo Select",             precio:50,  costo:15, slots:1, emoji:"🌟" },
-  { id:"ludo_pack",   nombre:"Ludo Pack",               precio:130, costo:45, slots:1, emoji:"📦" },
-  { id:"ludo_mix",    nombre:"Ludo Mix",                precio:150, costo:45, slots:3, emoji:"🌈" },
+  { id:"ludo_select", nombre:"Ludo Select",             precio:55,  costo:15, slots:1, emoji:"🌟" },
+  { id:"ludo_pack",   nombre:"Ludo Pack",               precio:150, costo:45, slots:1, emoji:"📦" },
+  { id:"ludo_mix",    nombre:"Ludo Mix",                precio:160, costo:45, slots:3, emoji:"🌈" },
 ];
+// Catálogo activo desde 2026-06-08: solo se ofrecen Ludo Select, Bote 500g (fam_1),
+// Ludo Pack, Ludo Mix y Elote amarillo — el resto queda oculto del menú normal
+// (ver getCatalogoDisponible). Se conservan en CATALOGO para no romper el
+// historial ni el modo "Precio familiar".
 
 function getCat(id) { return CATALOGO.find(function(c){return c.id===id;})||CATALOGO[0]; }
 function isClamshell(id) { return id.startsWith("ind_") || id.startsWith("ludo_"); }
@@ -137,16 +141,13 @@ function getCatalogoDisponible() {
     var IDS = ["zarzamora","frambuesa","blueberry_chica_b","elote_am","elote_bl"];
     return CATALOGO.filter(function(c){ return IDS.indexOf(c.id) !== -1; });
   }
-  return CATALOGO.filter(function(c) {
-    if (ubicacion === "El Sereno" && c.precio === 70 && c.slots === 0) return false;
-    if (ubicacion === "Azaleas"   && c.id === "blueberry_grande")        return false;
-    if (ubicacion === "Azaleas"   && c.id === "blueberry_chica_kg")     return false;
-    return true;
-  });
+  // Catálogo activo (2026-06-08): solo estos productos se muestran en el menú normal.
+  var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","elote_am"];
+  return CATALOGO.filter(function(c){ return ACTIVOS.indexOf(c.id) !== -1; });
 }
 
 // ─── Estado ───
-var items = [{ catId:"zarzamora", frutas:[], cantidad:1 }];
+var items = [{ catId:"ludo_select", frutas:[], cantidad:1 }];
 var ubicacion = "Azaleas";
 var precioFamiliar = false;
 
@@ -178,7 +179,7 @@ function setUbi(u) {
 }
 
 document.getElementById("addBtn").addEventListener("click", function(){
-  items.push({ catId:"zarzamora", frutas:[], cantidad:1 });
+  items.push({ catId:"ludo_select", frutas:[], cantidad:1 });
   renderItems();
 });
 document.getElementById("saveBtn").addEventListener("click", guardar);

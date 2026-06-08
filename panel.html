@@ -460,8 +460,17 @@ function parsearProducto(nombreRaw, cantidad) {
   var qty = parseInt(cantidad) || 1;
   var tipo = null; // "clamshell" | "familiar" | "fruta_suelta" | "elote"
   var frutas = [];
+  var mult = 1; // cajas (clamshells) representadas por cada unidad pedida
 
-  if (nombreRaw.indexOf("Individual (clamshell)") !== -1) {
+  if (nombreRaw.indexOf("Ludo Pack") !== -1) {
+    // Ludo Pack = 1 fruta elegida, pero son 3 clamshells de esa misma fruta
+    tipo = "clamshell";
+    mult = 3;
+    var partes = nombreRaw.split("·");
+    if (partes.length > 1) {
+      frutas = partes[1].trim().split("+").map(function(f){ return f.trim(); });
+    }
+  } else if (nombreRaw.indexOf("Individual (clamshell)") !== -1 || nombreRaw.indexOf("Ludo Select") !== -1 || nombreRaw.indexOf("Ludo Mix") !== -1) {
     tipo = "clamshell";
     var partes = nombreRaw.split("·");
     if (partes.length > 1) {
@@ -481,7 +490,7 @@ function parsearProducto(nombreRaw, cantidad) {
     frutas = [nombreRaw];
   }
 
-  return { tipo: tipo, frutas: frutas, qty: qty };
+  return { tipo: tipo, frutas: frutas, qty: qty, mult: mult };
 }
 
 /**
@@ -528,12 +537,13 @@ function calcularCompraProveedor(datos) {
       }
 
     } else if (p.tipo === "clamshell") {
+      var cajasPorFruta = qty * (p.mult || 1);
       p.frutas.forEach(function(fn) {
         if (!fn || !isBerry(fn)) return;
         if (!berries[fn]) berries[fn] = { cajas:0, cajasF:0, cajasC:0, clientes:[] };
-        berries[fn].cajas += qty;
-        berries[fn].cajasC += qty;
-        berries[fn].clientes.push({ nombre: cliente, cajasF: 0, cajasC: qty });
+        berries[fn].cajas += cajasPorFruta;
+        berries[fn].cajasC += cajasPorFruta;
+        berries[fn].clientes.push({ nombre: cliente, cajasF: 0, cajasC: cajasPorFruta });
       });
 
     } else if (p.tipo === "familiar") {

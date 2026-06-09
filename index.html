@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pedidos 🫐</title>
+<script src="config.js"></script>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { min-height:100vh; background:linear-gradient(160deg,#0b1a0b 0%,#132613 60%,#0b1a0b 100%); font-family:Georgia,serif; color:#e8f5e8; display:flex; flex-direction:column; align-items:center; padding:24px 16px 40px; }
@@ -95,38 +96,7 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 
 <script>
 var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwIqpDQvGr7pstVMRWJt-yPIvRfy5EqGQRWSV9oJBTPzrSzeP3Fzbkt5RS2od0Sl949/exec";
-var FRUTAS = ["Zarzamora","Frambuesa","Blueberry chica bote","Blueberry chica kg"];
-
-// El campo "costo" de cada fruta es el costo ACTUAL del proveedor — es lo que
-// se cobra en modo "Precio familiar" (ver getPrecioEfectivo). A diferencia de
-// panel.html (que guarda un HISTORIAL con vigencia para reportes retroactivos),
-// aquí solo importa el costo de HOY, porque este formulario es para capturar
-// pedidos nuevos. Cuando el proveedor cambie precios, actualiza el "costo"
-// aquí Y agrega la nueva vigencia en panel.html (HIST_COSTO_PROVEEDOR, etc.)
-// para que ambos archivos queden consistentes.
-// Actualizado 2026-06-08: Zarzamora/Frambuesa $45→$60, Blueberry chica bote $50→$80.
-var CATALOGO = [
-  { id:"zarzamora",          nombre:"Zarzamora",           precio:70,  costo:60, slots:0, emoji:"🫐" },
-  { id:"frambuesa",          nombre:"Frambuesa",            precio:70,  costo:60, slots:0, emoji:"🍓" },
-  { id:"blueberry_chica_b",  nombre:"Blueberry chica bote",precio:70,  costo:80, slots:0, emoji:"🫐" },
-  { id:"blueberry_chica_kg", nombre:"Blueberry chica kg",  precio:70,  costo:20, slots:0, emoji:"🫐" },
-  { id:"blueberry_grande",   nombre:"Blueberry grande",    precio:70,  costo:16, slots:0, emoji:"🫐" },
-  { id:"elote_am",  nombre:"Elote amarillo",            precio:100, costo:50, slots:0, emoji:"🌽" },
-  { id:"elote_bl",  nombre:"Elote blanco",              precio:60,  costo:30, slots:0, emoji:"🌽" },
-  { id:"ind_1",     nombre:"Individual (clamshell) 1x", precio:50,  costo:15, slots:1, emoji:"📦" },
-  { id:"ind_2",     nombre:"Individual (clamshell) 2x", precio:90,  costo:30, slots:2, emoji:"📦" },
-  { id:"ind_3",     nombre:"Individual (clamshell) 3x", precio:130, costo:45, slots:3, emoji:"📦" },
-  { id:"fam_1",     nombre:"Familiar (bote) 1x",        precio:120, costo:50, slots:1, emoji:"🪣" },
-  { id:"fam_2",     nombre:"Familiar (bote) 2x",        precio:220, costo:100,slots:2, emoji:"🪣" },
-  { id:"fam_3",     nombre:"Familiar (bote) 3x",        precio:320, costo:150,slots:3, emoji:"🪣" },
-  { id:"ludo_select", nombre:"Ludo Select",             precio:55,  costo:15, slots:1, emoji:"🌟" },
-  { id:"ludo_pack",   nombre:"Ludo Pack",               precio:150, costo:45, slots:1, emoji:"📦" },
-  { id:"ludo_mix",    nombre:"Ludo Mix",                precio:160, costo:45, slots:3, emoji:"🌈" },
-];
-// Catálogo activo desde 2026-06-08: solo se ofrecen Ludo Select, Bote 500g (fam_1),
-// Ludo Pack, Ludo Mix y Elote amarillo — el resto queda oculto del menú normal
-// (ver getCatalogoDisponible). Se conservan en CATALOGO para no romper el
-// historial ni el modo "Precio familiar".
+// CATALOGO, FRUTAS y costos provienen de config.js
 
 function getCat(id) { return CATALOGO.find(function(c){return c.id===id;})||CATALOGO[0]; }
 function isClamshell(id) { return id.startsWith("ind_") || id.startsWith("ludo_"); }
@@ -145,11 +115,10 @@ function getFrutasDisponibles(catId) {
 
 function getCatalogoDisponible() {
   if (precioFamiliar) {
-    var IDS = ["zarzamora","frambuesa","blueberry_chica_b","elote_am","elote_bl"];
+    var IDS = ["zarzamora","frambuesa","blueberry_chica_b","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"];
     return CATALOGO.filter(function(c){ return IDS.indexOf(c.id) !== -1; });
   }
-  // Catálogo activo (2026-06-08): solo estos productos se muestran en el menú normal.
-  var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","elote_am"];
+  var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"];
   return CATALOGO.filter(function(c){ return ACTIVOS.indexOf(c.id) !== -1; });
 }
 

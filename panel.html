@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel 🫐</title>
+<script src="config.js"></script>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { min-height:100vh; background:linear-gradient(160deg,#0b1a0b 0%,#132613 60%,#0b1a0b 100%); font-family:Georgia,serif; color:#e8f5e8; display:flex; flex-direction:column; align-items:center; padding:24px 16px 40px; }
@@ -172,56 +173,7 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 <script>
 var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwIqpDQvGr7pstVMRWJt-yPIvRfy5EqGQRWSV9oJBTPzrSzeP3Fzbkt5RS2od0Sl949/exec";
 
-// ═══════════════════════════════════════════
-// HISTORIAL DE COSTOS DEL PROVEEDOR (vigencias)
-// ═══════════════════════════════════════════
-// Cada fruta/producto tiene una LISTA de costos, cada uno con la fecha en que
-// entró en vigor ("desde", formato "YYYY-MM-DD"). Para calcular la utilidad de
-// UN PEDIDO se usa el costo que estaba vigente en SU fecha de entrega (la entrada
-// más reciente cuyo "desde" sea ≤ la fecha del pedido). Así:
-//   - Pedidos de antes de un cambio de precio → se calculan con el costo viejo
-//   - Pedidos de la fecha del cambio en adelante → se calculan con el costo nuevo
-// y los márgenes/utilidad que muestra el panel quedan correctos sin importar
-// cuándo cambien los precios del proveedor.
-//
-// 👉 Para registrar un nuevo aumento/cambio de costo: agrega un objeto al FINAL
-//    de la lista correspondiente con la fecha en que empieza a aplicar y el costo nuevo.
-//    No edites ni borres las entradas viejas — son las que mantienen correctos
-//    los reportes de fechas pasadas.
-
-// Costo por bote de 500g
-var HIST_COSTO_PROVEEDOR = {
-  "Zarzamora":            [ {desde:"2000-01-01", costo:45}, {desde:"2026-06-08", costo:60} ],
-  "Frambuesa":            [ {desde:"2000-01-01", costo:45}, {desde:"2026-06-08", costo:60} ],
-  "Blueberry":            [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
-  "Blueberry chica bote": [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ]
-};
-// Berries que el proveedor vende POR clamshell: $80/kg × 200g = $16/clamshell
-var HIST_COSTO_PROVEEDOR_CLAMSHELL = {
-  "Blueberry grande": [ {desde:"2000-01-01", costo:16} ]
-};
-// Berries que el proveedor vende POR KG (costo exacto, sin redondeo a botes)
-var HIST_COSTO_PROVEEDOR_KG = {
-  "Blueberry chica kg": [ {desde:"2000-01-01", costo:40} ]
-};
-var HIST_COSTO_ELOTE = {
-  "Elote amarillo": [ {desde:"2000-01-01", costo:50} ],
-  "Elote blanco":   [ {desde:"2000-01-01", costo:30} ]
-};
-var CAJAS_POR_BOTE = 3;  // un bote de 500g rinde 3 cajas (clamshells)
-
-// Devuelve { costo, desde } — el costo vigente en una fecha (YYYY-MM-DD) dada,
-// es decir la entrada más reciente cuyo "desde" sea ≤ esa fecha.
-function costoVigente(historial, fecha) {
-  if (!historial || !historial.length) return { costo:0, desde:null };
-  var activo = historial[0];
-  for (var i=0; i<historial.length; i++) {
-    if (historial[i].desde <= fecha) activo = historial[i]; else break;
-  }
-  return { costo: activo.costo, desde: activo.desde };
-}
-
-function isBerry(nombre) { return HIST_COSTO_PROVEEDOR.hasOwnProperty(nombre) || HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombre) || HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(nombre); }
+// HIST_COSTO_*, CAJAS_POR_BOTE, costoVigente, isBerry provienen de config.js
 
 var resumenData = [];
 var proveedorData = [];
@@ -331,6 +283,52 @@ function calcularKPIsGlobal(datos) {
   };
 }
 
+function calcularVentasPorFruta(datos) {
+  var frutas = {};
+  var elotes = {};
+  datos.forEach(function(r) {
+    var nombreRaw = r[0] || "";
+    var qty = parseInt(r[1]) || 1;
+    var precioU = parseFloat(r[3]) || 0;
+    var fecha = fmtFecha(r[6]);
+    var p = parsearProducto(nombreRaw, qty);
+    if (!p.tipo) return;
+
+    if (p.tipo === "elote") {
+      var en = p.frutas[0];
+      if (!elotes[en]) elotes[en] = { unidades:0, venta:0 };
+      elotes[en].unidades += qty;
+      elotes[en].venta += precioU * qty;
+
+    } else if (p.tipo === "fruta_suelta") {
+      var fn = p.frutas[0];
+      if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: fn==="Frambuesa"?"🍓":"🫐" };
+      frutas[fn].clamshells += HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn) ? qty : qty * CAJAS_POR_BOTE;
+      frutas[fn].venta += precioU * qty;
+
+    } else if (p.tipo === "clamshell") {
+      var cajas = qty * (p.mult || 1);
+      var ventaUnitaria = (precioU * qty) / (p.frutas.length || 1);
+      p.frutas.forEach(function(fn) {
+        if (!fn || !isBerry(fn)) return;
+        if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: fn==="Frambuesa"?"🍓":"🫐" };
+        frutas[fn].clamshells += cajas;
+        frutas[fn].venta += ventaUnitaria;
+      });
+
+    } else if (p.tipo === "familiar") {
+      var ventaUnitaria = (precioU * qty) / (p.frutas.length || 1);
+      p.frutas.forEach(function(fn) {
+        if (!fn || !isBerry(fn)) return;
+        if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: fn==="Frambuesa"?"🍓":"🫐" };
+        frutas[fn].clamshells += qty * CAJAS_POR_BOTE;
+        frutas[fn].venta += ventaUnitaria;
+      });
+    }
+  });
+  return { frutas: frutas, elotes: elotes };
+}
+
 function kpiCard(label, val, cls) {
   return '<div class="kpi-card"><div class="kpi-label">'+label+'</div><div class="kpi-val '+(cls||'')+'">'+val+'</div></div>';
 }
@@ -387,6 +385,45 @@ function renderTablero() {
         '<span class="cliente-bar-grams">$'+u[1].toFixed(0)+'</span>'+
       '</div>';
     });
+    html += '</div>';
+  }
+
+  // ── Ventas por fruta / producto ──
+  var vpf = calcularVentasPorFruta(datos);
+  var frutaKeys = Object.keys(vpf.frutas).sort();
+  var eloteKeys = Object.keys(vpf.elotes).sort();
+  if (frutaKeys.length || eloteKeys.length) {
+    var allVentas = frutaKeys.map(function(f){ return vpf.frutas[f].venta; })
+                             .concat(eloteKeys.map(function(e){ return vpf.elotes[e].venta; }));
+    var maxV = Math.max.apply(null, allVentas.concat([1]));
+    html += '<div class="kpi-block"><div class="kpi-block-title">VENTAS POR FRUTA / PRODUCTO</div>';
+    frutaKeys.forEach(function(fn) {
+      var f = vpf.frutas[fn];
+      var pct = Math.round(f.venta / maxV * 100);
+      html += '<div class="cliente-bar-row">'+
+        '<span class="cliente-bar-name">'+f.emoji+' '+fn+'</span>'+
+        '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%"></div></div>'+
+        '<span style="text-align:right;min-width:68px">'+
+          '<span style="font-size:12px;color:#a8e6a3">$'+f.venta.toFixed(0)+'</span><br>'+
+          '<span style="font-size:10px;color:#6b9e6b">'+f.clamshells+' clamshell'+(f.clamshells!==1?'s':'')+'</span>'+
+        '</span>'+
+      '</div>';
+    });
+    if (eloteKeys.length) {
+      html += '<div style="font-size:9px;color:#6b9e6b;letter-spacing:1.5px;margin:10px 0 6px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.1)">ELOTES</div>';
+      eloteKeys.forEach(function(en) {
+        var e = vpf.elotes[en];
+        var pct = Math.round(e.venta / maxV * 100);
+        html += '<div class="cliente-bar-row">'+
+          '<span class="cliente-bar-name">🌽 '+en+'</span>'+
+          '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>'+
+          '<span style="text-align:right;min-width:68px">'+
+            '<span style="font-size:12px;color:#fbbf24">$'+e.venta.toFixed(0)+'</span><br>'+
+            '<span style="font-size:10px;color:#6b9e6b">'+e.unidades+' paq</span>'+
+          '</span>'+
+        '</div>';
+      });
+    }
     html += '</div>';
   }
 

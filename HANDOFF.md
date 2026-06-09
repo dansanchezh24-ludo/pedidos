@@ -1,5 +1,5 @@
 # Handoff — Ludo Berries
-_Última actualización: 2026-06-08_
+_Última actualización: 2026-06-09 (rev 2)_
 
 ## ¿Qué es?
 App web de gestión de pedidos para la tienda de berries (Zarzamora, Frambuesa, Blueberry). Dos páginas HTML puras sin framework ni backend — todo corre en el browser.
@@ -28,13 +28,25 @@ App web de gestión de pedidos para la tienda de berries (Zarzamora, Frambuesa, 
 ---
 
 ## Productos activos (catálogo vigente)
+
+### Berries
 | Producto | Precio venta | Costo proveedor (desde 2026-06-08) |
 |---|---|---|
 | Ludo Select (clamshell 170g) | $55 | $60 (Zarzamora/Frambuesa) / $80 (Blueberry) |
 | Bote 500g | $120 | $60/$80 según fruta |
 | Ludo Pack (3 clamshells iguales) | $150 | — |
 | Ludo Mix (3 clamshells surtidos) | $160 | — |
-| Elote amarillo | $100 | $35 |
+
+### Elotes (paquetes, desde 2026-06-09)
+Costo base: $50 por cada 3 elotes amarillos.
+
+| Producto | Elotes | Precio venta | Costo |
+|---|---|---|---|
+| Ludo Antojo | 3 | $100 | $50 |
+| Ludo Parrilla | 6 | $190 | $100 |
+| Ludo Familiar | 9 | $280 | $150 |
+| Ludo Reunión | 12 | $360 | $200 |
+| Ludo Fiesta | 15 | $440 | $250 |
 
 Frutas disponibles: Zarzamora, Frambuesa, Blueberry chica bote.
 **Blueberry grande descontinuada** (sin existencia, el proveedor ya no la porciona para clamshell).
@@ -48,6 +60,7 @@ Frutas disponibles: Zarzamora, Frambuesa, Blueberry chica bote.
 |---|---|
 | `127e79b` | Relleno de clamshells cambiado a Blueberry chica bote (Blueberry grande sin stock) |
 | `5cbfbd6` | Sistema de costos con vigencia por fecha + precios nuevos del proveedor |
+| _(pendiente push)_ | `config.js` — fuente única de catálogo y costos; elotes → paquetes Ludo; ventas por fruta en Tablero |
 
 ### Cómo funciona el historial de costos
 En `panel.html` (~línea 192) los costos del proveedor se guardan como historial con fechas:
@@ -79,27 +92,26 @@ var HIST_COSTO_PROVEEDOR = {
   El script responde correctamente con historial desde abril 2026. No hay riesgo de pérdida por borrar caché.
 
 ### 🟡 Media
-- [ ] **Sincronización entre `index.html` y `panel.html`**
-  Cuando el proveedor suba precios: hay que actualizar el `costo` en `index.html` (precio familiar) **y** agregar la vigencia en `panel.html` (`HIST_COSTO_*`). Hay un comentario de aviso en el código pero es fácil olvidarlo.
-  _Acción: documentar el proceso de actualización de precios en un README._
+- [x] **Sincronización entre `index.html` y `panel.html`** _(resuelto 2026-06-09)_
+  Todo el catálogo y costos ahora viven en `config.js`. Para actualizar precios: **solo editar `config.js`**, no tocar los HTML.
 
-- [ ] **README casi vacío**
-  Solo dice "pedidos berries". Documentar: cómo usar la app, cómo actualizar precios, cómo agregar un producto nuevo.
+- [x] **README escrito** _(2026-06-09, commit `373877d`)_
+  Documenta: cómo usar la app, catálogo completo, cómo actualizar precios (dos archivos), cómo agregar un producto nuevo, stack, estructura de Google Sheets.
 
 ---
 
 ## Proceso: actualizar precios del proveedor
 
-Cuando el proveedor suba precios, hacer estos dos pasos:
+Cuando el proveedor suba precios, **solo editar `config.js`** — un solo archivo, dos pasos:
 
-**1. En `panel.html` (~línea 192):** agregar nueva entrada al historial
+**1. En `HIST_COSTO_PROVEEDOR`:** agregar nueva entrada al final de la fruta correspondiente
 ```js
-{desde:"YYYY-MM-DD", costo:NUEVO_PRECIO}
+{ desde:"YYYY-MM-DD", costo:NUEVO_PRECIO }
 ```
 
-**2. En `index.html` (~línea 100):** actualizar el campo `costo` del catálogo
+**2. En `CATALOGO`:** actualizar el campo `costo` de la fruta (usado en modo "Precio familiar")
 ```js
-{ id: "zarzamora", ..., costo: NUEVO_PRECIO }
+{ id:"zarzamora", ..., costo: NUEVO_PRECIO }
 ```
 
 Hacer commit y push → GitHub Pages despliega en ~1 minuto.

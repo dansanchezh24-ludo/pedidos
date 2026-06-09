@@ -545,26 +545,26 @@ function parsearProducto(nombreRaw, cantidad) {
     mult = 3;
     var partes = nombreRaw.split("·");
     if (partes.length > 1) {
-      frutas = partes[1].trim().split("+").map(function(f){ return f.trim(); });
+      frutas = partes[1].trim().split("+").map(function(f){ return normalizarFruta(f.trim()); });
     }
   } else if (nombreRaw.indexOf("Individual (clamshell)") !== -1 || nombreRaw.indexOf("Ludo Select") !== -1 || nombreRaw.indexOf("Ludo Mix") !== -1) {
     tipo = "clamshell";
     var partes = nombreRaw.split("·");
     if (partes.length > 1) {
-      frutas = partes[1].trim().split("+").map(function(f){ return f.trim(); });
+      frutas = partes[1].trim().split("+").map(function(f){ return normalizarFruta(f.trim()); });
     }
   } else if (nombreRaw.indexOf("Familiar (bote)") !== -1) {
     tipo = "familiar";
     var partes = nombreRaw.split("·");
     if (partes.length > 1) {
-      frutas = partes[1].trim().split("+").map(function(f){ return f.trim(); });
+      frutas = partes[1].trim().split("+").map(function(f){ return normalizarFruta(f.trim()); });
     }
   } else if (HIST_COSTO_ELOTE.hasOwnProperty(nombreRaw)) {
     tipo = "elote";
     frutas = [nombreRaw];
   } else if (HIST_COSTO_PROVEEDOR.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(nombreRaw)) {
     tipo = "fruta_suelta";
-    frutas = [nombreRaw];
+    frutas = [normalizarFruta(nombreRaw)];
   }
 
   return { tipo: tipo, frutas: frutas, qty: qty, mult: mult };

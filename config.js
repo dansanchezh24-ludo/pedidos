@@ -1,7 +1,7 @@
 // config.js — Configuración compartida entre index.html y panel.html
 // Para actualizar precios: editar AQUÍ. No tocar index.html ni panel.html.
 
-var FRUTAS = ["Zarzamora","Frambuesa","Blueberry chica bote","Blueberry chica kg"];
+var FRUTAS = ["Zarzamora","Frambuesa","Blueberry"];
 
 var CAJAS_POR_BOTE = 3;
 
@@ -9,9 +9,7 @@ var CATALOGO = [
   // Frutas sueltas
   { id:"zarzamora",         nombre:"Zarzamora",            precio:70,  costo:60, slots:0, emoji:"🫐" },
   { id:"frambuesa",         nombre:"Frambuesa",             precio:70,  costo:60, slots:0, emoji:"🍓" },
-  { id:"blueberry_chica_b", nombre:"Blueberry chica bote", precio:70,  costo:80, slots:0, emoji:"🫐" },
-  { id:"blueberry_chica_kg",nombre:"Blueberry chica kg",   precio:70,  costo:20, slots:0, emoji:"🫐" },
-  { id:"blueberry_grande",  nombre:"Blueberry grande",     precio:70,  costo:16, slots:0, emoji:"🫐" },
+  { id:"blueberry",         nombre:"Blueberry",            precio:70,  costo:80, slots:0, emoji:"🫐" },
   // Paquetes de berries
   { id:"ludo_select", nombre:"Ludo Select",          precio:55,  costo:15,  slots:1, emoji:"🌟" },
   { id:"ludo_pack",   nombre:"Ludo Pack",             precio:150, costo:45,  slots:1, emoji:"📦" },
@@ -35,14 +33,14 @@ var CATALOGO = [
 // NUNCA editar ni borrar entradas viejas — son necesarias para calcular márgenes históricos.
 
 var HIST_COSTO_PROVEEDOR = {
-  "Zarzamora":            [ {desde:"2000-01-01", costo:45}, {desde:"2026-06-08", costo:60} ],
-  "Frambuesa":            [ {desde:"2000-01-01", costo:45}, {desde:"2026-06-08", costo:60} ],
-  "Blueberry":            [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
-  "Blueberry chica bote": [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ]
+  "Zarzamora": [ {desde:"2000-01-01", costo:45}, {desde:"2026-06-08", costo:60} ],
+  "Frambuesa": [ {desde:"2000-01-01", costo:45}, {desde:"2026-06-08", costo:60} ],
+  "Blueberry": [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
+  // Aliases para compatibilidad con pedidos históricos en Sheets
+  "Blueberry chica bote": [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
+  "Blueberry grande":     [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
 };
-var HIST_COSTO_PROVEEDOR_CLAMSHELL = {
-  "Blueberry grande": [ {desde:"2000-01-01", costo:16} ]
-};
+var HIST_COSTO_PROVEEDOR_CLAMSHELL = {};
 var HIST_COSTO_PROVEEDOR_KG = {
   "Blueberry chica kg": [ {desde:"2000-01-01", costo:40} ]
 };
@@ -60,6 +58,16 @@ var HIST_COSTO_ELOTE = {
 };
 
 // Devuelve el costo vigente en una fecha (YYYY-MM-DD) dado el historial.
+// Mapea nombres históricos al nombre canónico actual.
+var ALIAS_FRUTAS = {
+  "Blueberry chica bote": "Blueberry",
+  "Blueberry grande":     "Blueberry",
+  "Blueberry chica kg":   "Blueberry",
+};
+function normalizarFruta(nombre) {
+  return ALIAS_FRUTAS[nombre] || nombre;
+}
+
 function costoVigente(historial, fecha) {
   if (!historial || !historial.length) return { costo:0, desde:null };
   var activo = historial[0];

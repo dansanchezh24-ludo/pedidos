@@ -115,7 +115,7 @@ function getFrutasDisponibles(catId) {
 
 function getCatalogoDisponible() {
   if (precioFamiliar) {
-    var IDS = ["zarzamora","frambuesa","blueberry_chica_b","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"];
+    var IDS = ["zarzamora","frambuesa","blueberry","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"];
     return CATALOGO.filter(function(c){ return IDS.indexOf(c.id) !== -1; });
   }
   var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"];

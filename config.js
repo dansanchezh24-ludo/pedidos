@@ -32,11 +32,11 @@ var CATALOGO = [
   { id:"ludo_tomatizado", nombre:"Ludo Tomatizado", precio:140, costo:60, slots:1, emoji:"🍅", frutasPermitidas: FRUTAS_CHERRY },
   { id:"ludo_fresh",      nombre:"Ludo Fresh",      precio:140, costo:60, slots:3, emoji:"🍒", frutasPermitidas: FRUTAS_CHERRY },
   // Elotes — paquetes (slots:0, sin selector de fruta; elotes = piezas por pack)
-  { id:"elote_antojo",   nombre:"Ludo Antojo",   precio:100, costo:50,  slots:0, emoji:"🌽", elotes:3  },
-  { id:"elote_parrilla", nombre:"Ludo Parrilla", precio:190, costo:100, slots:0, emoji:"🌽", elotes:6  },
-  { id:"elote_familiar", nombre:"Ludo Familiar", precio:280, costo:150, slots:0, emoji:"🌽", elotes:9  },
-  { id:"elote_reunion",  nombre:"Ludo Reunión",  precio:360, costo:200, slots:0, emoji:"🌽", elotes:12 },
-  { id:"elote_fiesta",   nombre:"Ludo Fiesta",   precio:440, costo:250, slots:0, emoji:"🌽", elotes:15 },
+  { id:"elote_antojo",   nombre:"Elote Select",    precio:100, costo:50,  slots:0, emoji:"🌽", elotes:3  },
+  { id:"elote_parrilla", nombre:"Ludo Duo",        precio:190, costo:100, slots:0, emoji:"🌽", elotes:6  },
+  { id:"elote_familiar", nombre:"Ludo Elotiza",    precio:280, costo:150, slots:0, emoji:"🌽", elotes:9  },
+  { id:"elote_reunion",  nombre:"Ludo Parrillada", precio:360, costo:200, slots:0, emoji:"🌽", elotes:12 },
+  { id:"elote_fiesta",   nombre:"Ludo Fiesta",     precio:440, costo:250, slots:0, emoji:"🌽", elotes:15 },
 ];
 
 // ── Historial de costos del proveedor ─────────────────────────────────────────
@@ -65,11 +65,11 @@ var HIST_COSTO_PROVEEDOR_KG = {
 var HIST_COSTO_ELOTE = {
   "Elote amarillo": [ {desde:"2000-01-01", costo:50} ],
   "Elote blanco":   [ {desde:"2000-01-01", costo:30} ],
-  "Ludo Antojo":    [ {desde:"2026-06-09", costo:50}  ],
-  "Ludo Parrilla":  [ {desde:"2026-06-09", costo:100} ],
-  "Ludo Familiar":  [ {desde:"2026-06-09", costo:150} ],
-  "Ludo Reunión":   [ {desde:"2026-06-09", costo:200} ],
-  "Ludo Fiesta":    [ {desde:"2026-06-09", costo:250} ]
+  "Elote Select":    [ {desde:"2026-06-09", costo:50}  ],
+  "Ludo Duo":        [ {desde:"2026-06-09", costo:100} ],
+  "Ludo Elotiza":    [ {desde:"2026-06-09", costo:150} ],
+  "Ludo Parrillada": [ {desde:"2026-06-09", costo:200} ],
+  "Ludo Fiesta":     [ {desde:"2026-06-09", costo:250} ]
 };
 
 // Devuelve el costo vigente en una fecha (YYYY-MM-DD) dado el historial.

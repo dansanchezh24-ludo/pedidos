@@ -2,6 +2,7 @@
 // Para actualizar precios: editar AQUÍ. No tocar index.html ni panel.html.
 
 var FRUTAS = ["Zarzamora","Frambuesa","Blueberry"];
+var FRUTAS_CHERRY = ["Cherry rojo","Cherry amarillo","Tomate cherry kumato"];
 
 var CAJAS_POR_BOTE = 3;
 
@@ -10,6 +11,10 @@ var CATALOGO = [
   { id:"zarzamora",         nombre:"Zarzamora",            precio:70,  costo:60, slots:0, emoji:"🫐" },
   { id:"frambuesa",         nombre:"Frambuesa",             precio:70,  costo:60, slots:0, emoji:"🍓" },
   { id:"blueberry",         nombre:"Blueberry",            precio:70,  costo:80, slots:0, emoji:"🫐" },
+  { id:"fresa",             nombre:"Fresa",                precio:80,  costo:50, slots:0, emoji:"🍓" },
+  { id:"cherry_rojo",       nombre:"Cherry rojo",          precio:50,  costo:20, slots:0, emoji:"🍒" },
+  { id:"cherry_amarillo",   nombre:"Cherry amarillo",      precio:50,  costo:20, slots:0, emoji:"🍋" },
+  { id:"tomate_kumato",     nombre:"Tomate cherry kumato", precio:50,  costo:20, slots:0, emoji:"🍅" },
   // Paquetes de berries
   { id:"ludo_select", nombre:"Ludo Select",          precio:55,  costo:15,  slots:1, emoji:"🌟" },
   { id:"ludo_pack",   nombre:"Ludo Pack",             precio:150, costo:45,  slots:1, emoji:"📦" },
@@ -20,6 +25,12 @@ var CATALOGO = [
   { id:"ind_1",       nombre:"Individual (clamshell) 1x", precio:50,  costo:15, slots:1, emoji:"📦" },
   { id:"ind_2",       nombre:"Individual (clamshell) 2x", precio:90,  costo:30, slots:2, emoji:"📦" },
   { id:"ind_3",       nombre:"Individual (clamshell) 3x", precio:130, costo:45, slots:3, emoji:"📦" },
+  // Paquetes fresa
+  { id:"fresa_2", nombre:"Fresa 2 paquetes", precio:150, costo:100, slots:0, emoji:"🍓" },
+  { id:"fresa_3", nombre:"Fresa 3 paquetes", precio:210, costo:150, slots:0, emoji:"🍓" },
+  // Paquetes cherry
+  { id:"ludo_tomatizado", nombre:"Ludo Tomatizado", precio:140, costo:60, slots:1, emoji:"🍅", frutasPermitidas: FRUTAS_CHERRY },
+  { id:"ludo_fresh",      nombre:"Ludo Fresh",      precio:140, costo:60, slots:3, emoji:"🍒", frutasPermitidas: FRUTAS_CHERRY },
   // Elotes — paquetes (slots:0, sin selector de fruta; elotes = piezas por pack)
   { id:"elote_antojo",   nombre:"Ludo Antojo",   precio:100, costo:50,  slots:0, emoji:"🌽", elotes:3  },
   { id:"elote_parrilla", nombre:"Ludo Parrilla", precio:190, costo:100, slots:0, emoji:"🌽", elotes:6  },
@@ -39,6 +50,10 @@ var HIST_COSTO_PROVEEDOR = {
   // Aliases para compatibilidad con pedidos históricos en Sheets
   "Blueberry chica bote": [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
   "Blueberry grande":     [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
+  "Fresa":                [ {desde:"2026-06-29", costo:50} ],
+  "Cherry rojo":          [ {desde:"2026-06-29", costo:20} ],
+  "Cherry amarillo":      [ {desde:"2026-06-29", costo:20} ],
+  "Tomate cherry kumato": [ {desde:"2026-06-29", costo:20} ],
 };
 var HIST_COSTO_PROVEEDOR_CLAMSHELL = {};
 var HIST_COSTO_PROVEEDOR_KG = {

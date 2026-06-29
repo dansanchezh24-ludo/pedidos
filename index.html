@@ -107,6 +107,8 @@ function isFamiliar(id)  { return id.startsWith("fam_"); }
 // no se ofrece para llenar nada. Tanto los clamshells (Individual/Ludo *)
 // como los botes familiares se llenan con Blueberry chica bote.
 function getFrutasDisponibles(catId) {
+  var cat = getCat(catId);
+  if (cat.frutasPermitidas) return cat.frutasPermitidas;
   return FRUTAS.filter(function(f) {
     if (f === "Blueberry chica kg") return false;
     return true;

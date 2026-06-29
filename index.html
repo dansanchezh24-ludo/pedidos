@@ -117,7 +117,7 @@ function getFrutasDisponibles(catId) {
 
 function getCatalogoDisponible() {
   if (precioFamiliar) {
-    var IDS = ["zarzamora","frambuesa","blueberry","fresa","cherry_rojo","cherry_amarillo","tomate_kumato","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"];
+    var IDS = ["zarzamora","frambuesa","blueberry","fresa","cherry_rojo","cherry_amarillo","tomate_kumato","elote_antojo"];
     return CATALOGO.filter(function(c){ return IDS.indexOf(c.id) !== -1; });
   }
   var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","fresa","fresa_2","fresa_3","cherry_rojo","cherry_amarillo","tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"];

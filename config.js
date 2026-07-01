@@ -37,6 +37,19 @@ var CATALOGO = [
   { id:"elote_familiar", nombre:"Ludo Elotiza",    precio:280, costo:150, slots:0, emoji:"🌽", elotes:9  },
   { id:"elote_reunion",  nombre:"Ludo Parrillada", precio:360, costo:200, slots:0, emoji:"🌽", elotes:12 },
   { id:"elote_fiesta",   nombre:"Ludo Fiesta",     precio:440, costo:250, slots:0, emoji:"🌽", elotes:15 },
+  // Ludo Mercado — frutas y productos directos (desde 2026-06-30)
+  // unidad:"kg" → precio/costo son valores POR KG; piezasPorKg permite convertir a gramos o pieza.
+  { id:"limon_persa",  nombre:"Limón persa sin semilla", precio:50,  costo:37, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🍋" },
+  { id:"tuna",         nombre:"Tuna",                     precio:40,  costo:27, unidad:"kg", piezasPorKg:5,  slots:0, emoji:"🌵" },
+  { id:"maracuya",     nombre:"Maracuyá",                 precio:100, costo:60, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟠" },
+  { id:"rambutan",     nombre:"Rambután",                 precio:90,  costo:50, unidad:"kg", piezasPorKg:30, slots:0, emoji:"🔴" },
+  { id:"ciruela_roja", nombre:"Ciruela roja",             precio:70,  costo:31, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟣" },
+  // Piezas fijas — el costo ya viene convertido de $/kg a $/pieza (costo familiar ÷ piezas por kg)
+  { id:"coco_cafe",    nombre:"Coco (café)", precio:60,  costo:40,    slots:0, emoji:"🥥" },
+  { id:"pitahaya",     nombre:"Pitahaya",    precio:80,  costo:36.67, slots:0, emoji:"🐉" },
+  // Bote / clamshell fijos
+  { id:"cereza",       nombre:"Cereza", precio:120, costo:70, slots:0, emoji:"🍒" },
+  { id:"higo",         nombre:"Higo",   precio:100, costo:60, slots:0, emoji:"🟤" },
 ];
 
 // ── Historial de costos del proveedor ─────────────────────────────────────────
@@ -54,10 +67,24 @@ var HIST_COSTO_PROVEEDOR = {
   "Cherry rojo":          [ {desde:"2026-06-29", costo:20} ],
   "Cherry amarillo":      [ {desde:"2026-06-29", costo:20} ],
   "Tomate cherry kumato": [ {desde:"2026-06-29", costo:20} ],
+  "Cereza":               [ {desde:"2026-06-30", costo:70} ],
 };
-var HIST_COSTO_PROVEEDOR_CLAMSHELL = {};
+// Higo se compra por clamshell (sin conversión a botes, como los cherries lo harían si vinieran así).
+var HIST_COSTO_PROVEEDOR_CLAMSHELL = {
+  "Higo": [ {desde:"2026-06-30", costo:60} ],
+};
 var HIST_COSTO_PROVEEDOR_KG = {
-  "Blueberry chica kg": [ {desde:"2000-01-01", costo:40} ]
+  "Blueberry chica kg": [ {desde:"2000-01-01", costo:40} ],
+  "Limón persa sin semilla": [ {desde:"2026-06-30", costo:37} ],
+  "Tuna":                     [ {desde:"2026-06-30", costo:27} ],
+  "Maracuyá":                 [ {desde:"2026-06-30", costo:60} ],
+  "Rambután":                 [ {desde:"2026-06-30", costo:50} ],
+  "Ciruela roja":             [ {desde:"2026-06-30", costo:31} ],
+};
+// Productos vendidos por pieza individual, fuera de la familia de elotes.
+var HIST_COSTO_PIEZA = {
+  "Coco (café)": [ {desde:"2026-06-30", costo:40} ],
+  "Pitahaya":    [ {desde:"2026-06-30", costo:36.67} ],
 };
 // Elotes — costo por unidad pedida.
 // Elote amarillo/blanco: por pieza individual.
@@ -96,4 +123,31 @@ function isBerry(nombre) {
   return HIST_COSTO_PROVEEDOR.hasOwnProperty(nombre) ||
          HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombre) ||
          HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(nombre);
+}
+
+// ── Conversión kg / gramos / pieza (Ludo Mercado) ──────────────────────────
+
+// Convierte un valor "por kg" (precio o costo) a la unidad de venta elegida.
+// Si el producto no es unidad:"kg", regresa el valor sin cambios.
+function precioBaseUnidad(cat, base, unidad) {
+  if (cat.unidad !== "kg") return base;
+  if (unidad === "gramos") return base / 1000;
+  if (unidad === "pieza")  return base / cat.piezasPorKg;
+  return base; // kg
+}
+
+// Convierte una cantidad capturada en la unidad elegida a su equivalente en kg.
+function cantidadAKg(cat, cantidad, unidad) {
+  if (unidad === "gramos") return cantidad / 1000;
+  if (unidad === "pieza")  return cantidad / cat.piezasPorKg;
+  return cantidad; // kg
+}
+
+// Extrae {base, cantidad, unidad} de un nombre guardado como "Nombre (1.5 kg)".
+// Regresa null si el nombre no tiene ese sufijo.
+function parseSufijoUnidad(nombreRaw) {
+  var m = /^(.+) \(([\d.]+)\s*(kg|g|pza)\)$/.exec(nombreRaw);
+  if (!m) return null;
+  var unidad = m[3] === "g" ? "gramos" : m[3] === "pza" ? "pieza" : "kg";
+  return { base: m[1], cantidad: parseFloat(m[2]), unidad: unidad };
 }

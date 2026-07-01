@@ -51,6 +51,29 @@ Costo base del proveedor: $50 por cada 3 elotes.
 | Ludo Reunión | 12 | $360 | $200 |
 | Ludo Fiesta | 15 | $440 | $250 |
 
+### Ludo Mercado (desde 2026-06-30)
+Frutas y productos directos — no usan el sistema de bote/clamshell de berries.
+
+| Producto | Presentación | Precio venta | Costo familiar |
+|---|---|---|---|
+| Limón persa sin semilla | kg (+ gr/pieza) | $50/kg | $37/kg |
+| Tuna | kg (+ gr/pieza) | $40/kg | $27/kg |
+| Maracuyá | kg (+ gr/pieza) | $100/kg | $60/kg |
+| Rambután | kg (+ gr/pieza) | $90/kg | $50/kg |
+| Ciruela roja | kg (+ gr/pieza) | $70/kg | $31/kg |
+| Coco (café) | pieza | $60 | $40 |
+| Pitahaya | pieza | $80 | $36.67 |
+| Cereza | bote | $120 | $70 |
+| Higo | clamshell | $100 | $60 |
+
+Las 5 frutas por kg tienen selector Kg/Gramos/Pieza en `index.html` (usa `precioBaseUnidad()` / `cantidadAKg()` de `config.js`). El pedido se guarda con el sufijo de unidad en el nombre, ej. `"Rambután (250 g)"`, para que `panel.html` lo reconozca y convierta a kg equivalente al calcular el pago a proveedor.
+
+`panel.html` — pestaña Proveedor tiene dos tarjetas nuevas:
+- **🥥 Piezas** — Coco (café) y Pitahaya, costeados vía `HIST_COSTO_PIEZA`.
+- **🥭 Mercado (kg)** — las 5 frutas por kg, agregadas a kg equivalente y costeadas vía `HIST_COSTO_PROVEEDOR_KG`.
+
+Cereza (bote) y Higo (clamshell) entran al mecanismo existente de berries (`HIST_COSTO_PROVEEDOR` / `HIST_COSTO_PROVEEDOR_CLAMSHELL`).
+
 ---
 
 ## Estado actual

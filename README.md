@@ -61,6 +61,32 @@ El panel tiene tres secciones:
 | Familiar 2x | $220 |
 | Familiar 3x | $320 |
 
+### Ludo Mercado (desde 2026-06-30)
+Frutas y productos directos, fuera del sistema de bote/clamshell de berries.
+
+**Por kg (con conversor a gramos o pieza):**
+| Producto | Precio/kg | Costo familiar/kg | Piezas por kg |
+|---|---|---|---|
+| Limón persa sin semilla | $50 | $37 | 10 |
+| Tuna | $40 | $27 | 5 |
+| Maracuyá | $100 | $60 | 10 |
+| Rambután | $90 | $50 | 30 |
+| Ciruela roja | $70 | $31 | 10 |
+
+En `index.html`, estos productos muestran un selector Kg / Gramos / Pieza — el precio de la línea se recalcula según la unidad elegida (precio o costo por kg ÷1000 para gramos, ÷piezas por kg para pieza).
+
+**Piezas fijas:**
+| Producto | Precio | Costo familiar |
+|---|---|---|
+| Coco (café) | $60 | $40 |
+| Pitahaya | $80 | $36.67 |
+
+**Bote / clamshell fijos:**
+| Producto | Presentación | Precio | Costo familiar |
+|---|---|---|---|
+| Cereza | bote | $120 | $70 |
+| Higo | clamshell | $100 | $60 |
+
 ---
 
 ## Cómo actualizar precios del proveedor
@@ -116,6 +142,18 @@ Agregar en `CATALOGO` dentro de `index.html`:
 
 - `slots:0` = no tiene clamshell, se vende directamente
 - `id` debe ser único, sin espacios
+
+### Producto de Ludo Mercado por kg (con conversor gramos/pieza)
+
+Agregar en `CATALOGO` dentro de `config.js`:
+
+```js
+{ id:"nuevo_id", nombre:"Nombre", precio:XX, costo:XX, unidad:"kg", piezasPorKg:N, slots:0, emoji:"🍋" },
+```
+
+- `precio`/`costo` son valores **por kg**; el conversor los divide entre 1000 (gramos) o entre `piezasPorKg` (pieza).
+- Agregar también su historial en `HIST_COSTO_PROVEEDOR_KG` (config.js) para que `panel.html` calcule bien el pago a proveedor.
+- El nombre se guarda en Sheets con sufijo de unidad, ej. `"Nombre (1.5 kg)"` — necesario para que `panel.html` lo reconozca.
 
 ### Producto con clamshell (el cliente elige fruta)
 

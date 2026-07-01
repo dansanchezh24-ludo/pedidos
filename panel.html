@@ -173,7 +173,13 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 <script>
 var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwIqpDQvGr7pstVMRWJt-yPIvRfy5EqGQRWSV9oJBTPzrSzeP3Fzbkt5RS2od0Sl949/exec";
 
-// HIST_COSTO_*, CAJAS_POR_BOTE, costoVigente, isBerry provienen de config.js
+// HIST_COSTO_*, CAJAS_POR_BOTE, costoVigente, isBerry, precioBaseUnidad,
+// cantidadAKg, parseSufijoUnidad provienen de config.js
+
+function emojiDeFruta(nombre) {
+  var c = CATALOGO.find(function(x){ return x.nombre === nombre; });
+  return (c && c.emoji) || "🫐";
+}
 
 var resumenData = [];
 var proveedorData = [];
@@ -262,7 +268,7 @@ function calcularKPIsGlobal(datos) {
     pagoProveedorTotal += c.costoTotalProveedor;
   });
 
-  var productosVendidos = datos.reduce(function(s,r){ return s+(parseInt(r[1])||0); },0);
+  var productosVendidos = datos.reduce(function(s,r){ return s+(parseFloat(r[1])||0); },0);
   var clientesSet = {};
   var porUbicacion = {};
   datos.forEach(function(r){
@@ -286,9 +292,11 @@ function calcularKPIsGlobal(datos) {
 function calcularVentasPorFruta(datos) {
   var frutas = {};
   var elotes = {};
+  var piezas = {};
+  var mercado = {};
   datos.forEach(function(r) {
     var nombreRaw = r[0] || "";
-    var qty = parseInt(r[1]) || 1;
+    var qty = parseFloat(r[1]) || 1;
     var precioU = parseFloat(r[3]) || 0;
     var fecha = fmtFecha(r[6]);
     var p = parsearProducto(nombreRaw, qty);
@@ -300,9 +308,21 @@ function calcularVentasPorFruta(datos) {
       elotes[en].unidades += qty;
       elotes[en].venta += precioU * qty;
 
+    } else if (p.tipo === "pieza_directa") {
+      var pn = p.frutas[0];
+      if (!piezas[pn]) piezas[pn] = { unidades:0, venta:0 };
+      piezas[pn].unidades += qty;
+      piezas[pn].venta += precioU * qty;
+
+    } else if (p.tipo === "mercado_kg") {
+      var mn = p.frutas[0];
+      if (!mercado[mn]) mercado[mn] = { kg:0, venta:0 };
+      mercado[mn].kg += p.kgEquivalente;
+      mercado[mn].venta += precioU * qty;
+
     } else if (p.tipo === "fruta_suelta") {
       var fn = p.frutas[0];
-      if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: fn==="Frambuesa"?"🍓":"🫐" };
+      if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: emojiDeFruta(fn) };
       frutas[fn].clamshells += HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn) ? qty : qty * CAJAS_POR_BOTE;
       frutas[fn].venta += precioU * qty;
 
@@ -311,7 +331,7 @@ function calcularVentasPorFruta(datos) {
       var ventaUnitaria = (precioU * qty) / (p.frutas.length || 1);
       p.frutas.forEach(function(fn) {
         if (!fn || !isBerry(fn)) return;
-        if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: fn==="Frambuesa"?"🍓":"🫐" };
+        if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: emojiDeFruta(fn) };
         frutas[fn].clamshells += cajas;
         frutas[fn].venta += ventaUnitaria;
       });
@@ -320,13 +340,13 @@ function calcularVentasPorFruta(datos) {
       var ventaUnitaria = (precioU * qty) / (p.frutas.length || 1);
       p.frutas.forEach(function(fn) {
         if (!fn || !isBerry(fn)) return;
-        if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: fn==="Frambuesa"?"🍓":"🫐" };
+        if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: emojiDeFruta(fn) };
         frutas[fn].clamshells += qty * CAJAS_POR_BOTE;
         frutas[fn].venta += ventaUnitaria;
       });
     }
   });
-  return { frutas: frutas, elotes: elotes };
+  return { frutas: frutas, elotes: elotes, piezas: piezas, mercado: mercado };
 }
 
 function kpiCard(label, val, cls) {
@@ -392,9 +412,13 @@ function renderTablero() {
   var vpf = calcularVentasPorFruta(datos);
   var frutaKeys = Object.keys(vpf.frutas).sort();
   var eloteKeys = Object.keys(vpf.elotes).sort();
-  if (frutaKeys.length || eloteKeys.length) {
+  var piezaKeys = Object.keys(vpf.piezas).sort();
+  var mercadoKeys = Object.keys(vpf.mercado).sort();
+  if (frutaKeys.length || eloteKeys.length || piezaKeys.length || mercadoKeys.length) {
     var allVentas = frutaKeys.map(function(f){ return vpf.frutas[f].venta; })
-                             .concat(eloteKeys.map(function(e){ return vpf.elotes[e].venta; }));
+                             .concat(eloteKeys.map(function(e){ return vpf.elotes[e].venta; }))
+                             .concat(piezaKeys.map(function(p){ return vpf.piezas[p].venta; }))
+                             .concat(mercadoKeys.map(function(m){ return vpf.mercado[m].venta; }));
     var maxV = Math.max.apply(null, allVentas.concat([1]));
     html += '<div class="kpi-block"><div class="kpi-block-title">VENTAS POR FRUTA / PRODUCTO</div>';
     frutaKeys.forEach(function(fn) {
@@ -420,6 +444,36 @@ function renderTablero() {
           '<span style="text-align:right;min-width:68px">'+
             '<span style="font-size:12px;color:#fbbf24">$'+e.venta.toFixed(0)+'</span><br>'+
             '<span style="font-size:10px;color:#6b9e6b">'+e.unidades+' paq</span>'+
+          '</span>'+
+        '</div>';
+      });
+    }
+    if (piezaKeys.length) {
+      html += '<div style="font-size:9px;color:#6b9e6b;letter-spacing:1.5px;margin:10px 0 6px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.1)">PIEZAS</div>';
+      piezaKeys.forEach(function(pn) {
+        var p = vpf.piezas[pn];
+        var pct = Math.round(p.venta / maxV * 100);
+        html += '<div class="cliente-bar-row">'+
+          '<span class="cliente-bar-name">'+emojiDeFruta(pn)+' '+pn+'</span>'+
+          '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>'+
+          '<span style="text-align:right;min-width:68px">'+
+            '<span style="font-size:12px;color:#fbbf24">$'+p.venta.toFixed(0)+'</span><br>'+
+            '<span style="font-size:10px;color:#6b9e6b">'+p.unidades+' pz</span>'+
+          '</span>'+
+        '</div>';
+      });
+    }
+    if (mercadoKeys.length) {
+      html += '<div style="font-size:9px;color:#6b9e6b;letter-spacing:1.5px;margin:10px 0 6px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.1)">MERCADO (KG)</div>';
+      mercadoKeys.forEach(function(mn) {
+        var m = vpf.mercado[mn];
+        var pct = Math.round(m.venta / maxV * 100);
+        html += '<div class="cliente-bar-row">'+
+          '<span class="cliente-bar-name">'+emojiDeFruta(mn)+' '+mn+'</span>'+
+          '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>'+
+          '<span style="text-align:right;min-width:68px">'+
+            '<span style="font-size:12px;color:#fbbf24">$'+m.venta.toFixed(0)+'</span><br>'+
+            '<span style="font-size:10px;color:#6b9e6b">'+m.kg.toFixed(2)+' kg</span>'+
           '</span>'+
         '</div>';
       });
@@ -534,10 +588,11 @@ async function cargarProveedor() {
  *   "Elote amarillo"
  */
 function parsearProducto(nombreRaw, cantidad) {
-  var qty = parseInt(cantidad) || 1;
-  var tipo = null; // "clamshell" | "familiar" | "fruta_suelta" | "elote"
+  var qty = parseFloat(cantidad) || 1;
+  var tipo = null; // "clamshell" | "familiar" | "fruta_suelta" | "elote" | "pieza_directa" | "mercado_kg"
   var frutas = [];
   var mult = 1; // cajas (clamshells) representadas por cada unidad pedida
+  var kgEquivalente = 0;
 
   if (nombreRaw.indexOf("Ludo Pack") !== -1) {
     // Ludo Pack = 1 fruta elegida, pero son 3 clamshells de esa misma fruta
@@ -562,12 +617,23 @@ function parsearProducto(nombreRaw, cantidad) {
   } else if (HIST_COSTO_ELOTE.hasOwnProperty(nombreRaw)) {
     tipo = "elote";
     frutas = [nombreRaw];
+  } else if (HIST_COSTO_PIEZA.hasOwnProperty(nombreRaw)) {
+    // Productos de Ludo Mercado vendidos por pieza fija (coco, pitahaya).
+    tipo = "pieza_directa";
+    frutas = [nombreRaw];
+  } else if (parseSufijoUnidad(nombreRaw) && HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(parseSufijoUnidad(nombreRaw).base)) {
+    // Frutas de Ludo Mercado vendidas por kg, guardadas como "Nombre (N kg/g/pza)".
+    var suf = parseSufijoUnidad(nombreRaw);
+    tipo = "mercado_kg";
+    frutas = [suf.base];
+    var catRef = CATALOGO.find(function(c){ return c.nombre === suf.base; });
+    kgEquivalente = catRef ? cantidadAKg(catRef, suf.cantidad, suf.unidad) : suf.cantidad;
   } else if (HIST_COSTO_PROVEEDOR.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(nombreRaw)) {
     tipo = "fruta_suelta";
     frutas = [normalizarFruta(nombreRaw)];
   }
 
-  return { tipo: tipo, frutas: frutas, qty: qty, mult: mult };
+  return { tipo: tipo, frutas: frutas, qty: qty, mult: mult, kgEquivalente: kgEquivalente };
 }
 
 /**
@@ -585,11 +651,13 @@ function calcularCompraProveedor(datos, fecha) {
   fecha = fecha || fmtFecha(datos[0] && datos[0][6]);
   var berries = {};   // fruta -> { cajas, clientes: [{nombre, cajas}] }
   var elotes  = {};
+  var piezasDirectas = {};
+  var mercadoKg = {};
   var ventaTotal = 0;
 
   datos.forEach(function(r) {
     var nombreRaw = r[0] || "";
-    var qty       = parseInt(r[1]) || 1;
+    var qty       = parseFloat(r[1]) || 1;
     var cliente   = r[2] || "?";
     var precioU   = parseFloat(r[3]) || 0;
     ventaTotal   += precioU * qty;
@@ -602,6 +670,18 @@ function calcularCompraProveedor(datos, fecha) {
       if (!elotes[enombre]) elotes[enombre] = { piezas:0, clientes:[] };
       elotes[enombre].piezas += qty;
       elotes[enombre].clientes.push({ nombre: cliente, piezas: qty });
+
+    } else if (p.tipo === "pieza_directa") {
+      var pn = p.frutas[0];
+      if (!piezasDirectas[pn]) piezasDirectas[pn] = { piezas:0, clientes:[] };
+      piezasDirectas[pn].piezas += qty;
+      piezasDirectas[pn].clientes.push({ nombre: cliente, piezas: qty });
+
+    } else if (p.tipo === "mercado_kg") {
+      var mn = p.frutas[0];
+      if (!mercadoKg[mn]) mercadoKg[mn] = { kg:0, clientes:[] };
+      mercadoKg[mn].kg += p.kgEquivalente;
+      mercadoKg[mn].clientes.push({ nombre: cliente, kg: p.kgEquivalente });
 
     } else if (p.tipo === "fruta_suelta") {
       var fn = p.frutas[0];
@@ -724,12 +804,52 @@ function calcularCompraProveedor(datos, fecha) {
     };
   });
 
-  var costoTotalProveedor = costoTotalBerries + costoTotalElotes;
+  var piezasResult = {};
+  var costoTotalPiezas = 0;
+  Object.keys(piezasDirectas).forEach(function(pn) {
+    var piezas = piezasDirectas[pn].piezas;
+    var vigP = costoVigente(HIST_COSTO_PIEZA[pn], fecha);
+    var costoU = vigP.costo || 0;
+    var costoT = piezas * costoU;
+    costoTotalPiezas += costoT;
+    var cMap = {};
+    piezasDirectas[pn].clientes.forEach(function(c){ cMap[c.nombre]=(cMap[c.nombre]||0)+c.piezas; });
+    piezasResult[pn] = {
+      piezas: piezas,
+      costoUnitario: costoU,
+      costoVigenteDesde: vigP.desde,
+      costoTotal: +costoT.toFixed(2),
+      clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], piezas:e[1]}; })
+    };
+  });
+
+  var mercadoKgResult = {};
+  var costoTotalMercado = 0;
+  Object.keys(mercadoKg).forEach(function(mn) {
+    var kgNec = +mercadoKg[mn].kg.toFixed(3);
+    var vigM = costoVigente(HIST_COSTO_PROVEEDOR_KG[mn], fecha);
+    var costoU = vigM.costo || 0;
+    var costoT = kgNec * costoU;
+    costoTotalMercado += costoT;
+    var cMap = {};
+    mercadoKg[mn].clientes.forEach(function(c){ cMap[c.nombre]=(cMap[c.nombre]||0)+c.kg; });
+    mercadoKgResult[mn] = {
+      kgNecesarios: kgNec,
+      costoUnitario: costoU,
+      costoVigenteDesde: vigM.desde,
+      costoTotal: +costoT.toFixed(2),
+      clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], kg:+e[1].toFixed(3)}; })
+    };
+  });
+
+  var costoTotalProveedor = costoTotalBerries + costoTotalElotes + costoTotalPiezas + costoTotalMercado;
   var gananciaNeta = ventaTotal - costoTotalProveedor;
 
   return {
     berries: berriesResult,
     elotes: elotesResult,
+    piezas: piezasResult,
+    mercadoKg: mercadoKgResult,
     ventaTotal: ventaTotal,
     costoTotalProveedor: costoTotalProveedor,
     gananciaNeta: gananciaNeta
@@ -754,7 +874,7 @@ function renderProveedor() {
   }
 
   var calc = calcularCompraProveedor(datos, filtro);
-  var B = calc.berries, E = calc.elotes;
+  var B = calc.berries, E = calc.elotes, P = calc.piezas, M = calc.mercadoKg;
 
   // ── Resumen superior ──
   var gnClass = calc.gananciaNeta < 0 ? "rojo" : "";
@@ -769,7 +889,7 @@ function renderProveedor() {
   // ── Tarjeta por fruta ──
   Object.keys(B).sort().forEach(function(fn) {
     var b = B[fn];
-    var emoji = fn==="Frambuesa" ? "🍓" : "🫐";
+    var emoji = emojiDeFruta(fn);
     var maxGramos = Math.max.apply(null, b.clienteDetalle.map(function(c){return c.gramos;}));
 
     var unidadSing = b.esPorClamshell ? "clamshell" : "bote";
@@ -869,6 +989,60 @@ function renderProveedor() {
     container.appendChild(ecard);
   }
 
+  // ── Tarjeta piezas directas (Ludo Mercado: coco, pitahaya...) ──
+  if (Object.keys(P).length > 0) {
+    var pcard = document.createElement("div");
+    pcard.className = "elote-card";
+    var ptotal = Object.values(P).reduce(function(s,p){return s+p.costoTotal;},0);
+    pcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🥥 Piezas</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+ptotal.toFixed(0)+'</span></div>';
+    Object.keys(P).sort().forEach(function(pn){
+      var p = P[pn];
+      var prow = document.createElement("div");
+      prow.className = "elote-row";
+      prow.innerHTML =
+        '<div>'+
+          '<div style="color:#e8f5e8">'+emojiDeFruta(pn)+' '+pn+'</div>'+
+          '<div style="color:#6b9e6b;font-size:11px;margin-top:3px">'+
+            p.clienteDetalle.map(function(cd){return cd.nombre+': '+cd.piezas+'pz';}).join(' · ')+
+          '</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="color:#ffcc02;font-weight:bold">'+p.piezas+' pz × $'+p.costoUnitario+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+p.costoTotal.toFixed(2)+'</div>'+
+          '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+p.costoVigenteDesde+'</div>'+
+        '</div>';
+      pcard.appendChild(prow);
+    });
+    container.appendChild(pcard);
+  }
+
+  // ── Tarjeta Ludo Mercado por kg (limón, tuna, maracuyá, rambután, ciruela) ──
+  if (Object.keys(M).length > 0) {
+    var mcard = document.createElement("div");
+    mcard.className = "elote-card";
+    var mtotal = Object.values(M).reduce(function(s,m){return s+m.costoTotal;},0);
+    mcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🥭 Mercado (kg)</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+mtotal.toFixed(0)+'</span></div>';
+    Object.keys(M).sort().forEach(function(mn){
+      var m = M[mn];
+      var mrow = document.createElement("div");
+      mrow.className = "elote-row";
+      mrow.innerHTML =
+        '<div>'+
+          '<div style="color:#e8f5e8">'+emojiDeFruta(mn)+' '+mn+'</div>'+
+          '<div style="color:#6b9e6b;font-size:11px;margin-top:3px">'+
+            m.clienteDetalle.map(function(cd){return cd.nombre+': '+cd.kg+'kg';}).join(' · ')+
+          '</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="color:#ffcc02;font-weight:bold">'+m.kgNecesarios+' kg × $'+m.costoUnitario+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+m.costoTotal.toFixed(2)+'</div>'+
+          '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+m.costoVigenteDesde+'</div>'+
+        '</div>';
+      mcard.appendChild(mrow);
+    });
+    container.appendChild(mcard);
+  }
+
   // ── Bloque "Pedido para proveedor" ──
   var pedidoBox = document.createElement("div");
   pedidoBox.className = "pedido-box";
@@ -892,6 +1066,14 @@ function renderProveedor() {
     var e = E[en];
     lineas.push(en+": "+e.piezas+" pz — $"+e.costoTotal);
   });
+  Object.keys(P).sort().forEach(function(pn){
+    var p = P[pn];
+    lineas.push(pn+": "+p.piezas+" pz — $"+p.costoTotal.toFixed(2));
+  });
+  Object.keys(M).sort().forEach(function(mn){
+    var m = M[mn];
+    lineas.push(mn+": "+m.kgNecesarios+" kg — $"+m.costoTotal.toFixed(2));
+  });
   lineas.push("");
   lineas.push("Total a pagar: $"+calc.costoTotalProveedor.toFixed(0));
   var textoCompleto = lineas.join("\n");
@@ -904,7 +1086,7 @@ function renderProveedor() {
   var lineasHTML = "";
   Object.keys(B).sort().forEach(function(fn){
     var b = B[fn];
-    var emoji = fn==="Frambuesa"?"🍓":"🫐";
+    var emoji = emojiDeFruta(fn);
     var precioKg = Math.round(b.costoProveedor / b.kgComprar);
     var formula = precioKg+' × '+b.kgComprar.toFixed(2)+' kg = $'+b.costoProveedor;
     var cantLabel;
@@ -927,6 +1109,20 @@ function renderProveedor() {
     lineasHTML += '<div class="pedido-line">'+
       '<span class="pedido-fruta">🌽 '+en+'<span class="pedido-cant">'+e.piezas+' pz</span></span>'+
       '<span class="pedido-costo">$'+e.costoTotal+'</span>'+
+    '</div>';
+  });
+  Object.keys(P).sort().forEach(function(pn){
+    var p = P[pn];
+    lineasHTML += '<div class="pedido-line">'+
+      '<span class="pedido-fruta">'+emojiDeFruta(pn)+' '+pn+'<span class="pedido-cant">'+p.piezas+' pz</span></span>'+
+      '<span class="pedido-costo">$'+p.costoTotal.toFixed(2)+'</span>'+
+    '</div>';
+  });
+  Object.keys(M).sort().forEach(function(mn){
+    var m = M[mn];
+    lineasHTML += '<div class="pedido-line">'+
+      '<span class="pedido-fruta">'+emojiDeFruta(mn)+' '+mn+'<span class="pedido-cant">'+m.kgNecesarios+' kg</span></span>'+
+      '<span class="pedido-costo">$'+m.costoTotal.toFixed(2)+'</span>'+
     '</div>';
   });
   var totalHTML = '<div class="pedido-total-row"><span>TOTAL A PAGAR</span><span>$'+calc.costoTotalProveedor.toFixed(0)+'</span></div>';

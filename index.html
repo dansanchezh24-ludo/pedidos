@@ -39,6 +39,12 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 .familiar-active-banner { background:linear-gradient(135deg,rgba(245,158,11,0.18),rgba(217,119,6,0.08)); border:1px solid rgba(245,158,11,0.35); border-radius:12px; padding:10px 16px; font-size:13px; color:#fbbf24; text-align:center; letter-spacing:0.5px; }
 .ubi-btn.familiar.active { background:linear-gradient(135deg,#f59e0b,#d97706); box-shadow:0 2px 14px rgba(245,158,11,0.38); }
 .ubi-btn.familiar { border-color:rgba(245,158,11,0.2); }
+
+/* ── LUDO MERCADO (conversor kg/gramos/pieza) ── */
+.unit-toggle { display:flex; gap:6px; flex:1; }
+.unit-btn { flex:1; padding:8px 0; background:rgba(255,255,255,0.04); border:1px solid rgba(168,230,163,0.2); border-radius:8px; color:#5a8a5a; font-size:12px; cursor:pointer; font-family:Georgia,serif; text-align:center; }
+.unit-btn.active { background:rgba(76,175,80,0.25); border-color:rgba(168,230,163,0.5); color:#a8e6a3; font-weight:bold; }
+.qty-num { flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(168,230,163,0.2); border-radius:10px; color:#e8f5e8; font-size:14px; padding:9px 10px; font-family:Georgia,serif; }
 </style>
 </head>
 <body>
@@ -115,19 +121,44 @@ function getFrutasDisponibles(catId) {
   });
 }
 
+var MERCADO = ["limon_persa","tuna","maracuya","rambutan","ciruela_roja","coco_cafe","pitahaya","cereza","higo"];
+
 function getCatalogoDisponible() {
   if (precioFamiliar) {
-    var IDS = ["zarzamora","frambuesa","blueberry","fresa","cherry_rojo","cherry_amarillo","tomate_kumato","elote_antojo"];
+    var IDS = ["zarzamora","frambuesa","blueberry","fresa","cherry_rojo","cherry_amarillo","tomate_kumato","elote_antojo"].concat(MERCADO);
     return CATALOGO.filter(function(c){ return IDS.indexOf(c.id) !== -1; });
   }
-  var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","fresa","fresa_2","fresa_3","cherry_rojo","cherry_amarillo","tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"];
+  var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","fresa","fresa_2","fresa_3","cherry_rojo","cherry_amarillo","tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"].concat(MERCADO);
   return CATALOGO.filter(function(c){ return ACTIVOS.indexOf(c.id) !== -1; });
 }
 
 // ─── Estado ───
-var items = [{ catId:"ludo_select", frutas:[], cantidad:1 }];
+var UNIDAD_DEFAULT_CANT = { kg:1, gramos:250, pieza:1 };
+
+function nuevoItem(catId) {
+  var cat = getCat(catId);
+  var item = { catId: catId, frutas:[], cantidad:1 };
+  if (cat.unidad === "kg") { item.unidadVenta = "kg"; item.cantidad = UNIDAD_DEFAULT_CANT.kg; }
+  return item;
+}
+
+var items = [nuevoItem("ludo_select")];
 var ubicacion = "Azaleas";
 var precioFamiliar = false;
+
+function fmtMoney(n) { return (Math.round(n*100)/100).toFixed(2).replace(/\.00$/,""); }
+function trimNum(n) { return (Math.round(n*100)/100).toString(); }
+
+// Precio/costo de UNA unidad de venta del producto (ya convertido si es unidad:"kg").
+function precioUnitario(cat, item) {
+  var base = precioFamiliar ? cat.costo : cat.precio;
+  return precioBaseUnidad(cat, base, (item && item.unidadVenta) || "kg");
+}
+function costoUnitario(cat, item) {
+  return precioBaseUnidad(cat, cat.costo, (item && item.unidadVenta) || "kg");
+}
+function calcularPrecioLinea(cat, item) { return precioUnitario(cat, item) * item.cantidad; }
+function calcularCostoLinea(cat, item)  { return costoUnitario(cat, item) * item.cantidad; }
 
 function getPrecioEfectivo(cat) { return precioFamiliar ? cat.costo : cat.precio; }
 
@@ -137,7 +168,7 @@ function setPrecioFamiliar(f) {
   document.getElementById("precioFamiliarBtn").classList.toggle("active", f);
   document.getElementById("familiarBanner").style.display = f ? "block" : "none";
   // En modo familiar el primer producto válido es zarzamora
-  items = [{ catId: f ? "zarzamora" : items[0].catId, frutas:[], cantidad:1 }];
+  items = [nuevoItem(f ? "zarzamora" : items[0].catId)];
   renderItems();
 }
 
@@ -157,7 +188,7 @@ function setUbi(u) {
 }
 
 document.getElementById("addBtn").addEventListener("click", function(){
-  items.push({ catId:"ludo_select", frutas:[], cantidad:1 });
+  items.push(nuevoItem("ludo_select"));
   renderItems();
 });
 document.getElementById("saveBtn").addEventListener("click", guardar);
@@ -177,7 +208,9 @@ function renderItems() {
     while (item.frutas.length < cat.slots) item.frutas.push(frutasDisp[0]);
     if (item.frutas.length > cat.slots) item.frutas = item.frutas.slice(0, cat.slots);
     var opts = catDisp.map(function(c){
-      return '<option value="'+c.id+'"'+(c.id===item.catId?' selected':'')+'>'+c.emoji+' '+c.nombre+' — $'+getPrecioEfectivo(c)+'</option>';
+      var base = precioFamiliar ? c.costo : c.precio;
+      var label = c.unidad === "kg" ? ("$"+fmtMoney(base)+"/kg") : ("$"+fmtMoney(base));
+      return '<option value="'+c.id+'"'+(c.id===item.catId?' selected':'')+'>'+c.emoji+' '+c.nombre+' — '+label+'</option>';
     }).join("");
     var div = document.createElement("div");
     div.className = "prod-card";
@@ -188,6 +221,22 @@ function renderItems() {
       '<select class="sel-prod" data-i="'+i+'">'+opts+'</select>'+
       (items.length>1?'<button class="del-btn" data-i="'+i+'">×</button>':'');
     div.appendChild(row1);
+    if (cat.unidad === "kg") {
+      var unidadRow = document.createElement("div");
+      unidadRow.className = "row";
+      unidadRow.innerHTML = '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px;min-width:52px">UNIDAD</span>';
+      var toggle = document.createElement("div");
+      toggle.className = "unit-toggle";
+      [["kg","Kg"],["gramos","Gramos"],["pieza","Pieza"]].forEach(function(u){
+        var b = document.createElement("button");
+        b.className = "unit-btn"+((item.unidadVenta||"kg")===u[0]?" active":"");
+        b.textContent = u[1];
+        b.dataset.i = i; b.dataset.u = u[0];
+        toggle.appendChild(b);
+      });
+      unidadRow.appendChild(toggle);
+      div.appendChild(unidadRow);
+    }
     if (cat.slots > 0) {
       var labels = cat.slots===1 ? ["Fruta"] : cat.slots===2 ? ["Fruta 1","Fruta 2"] : ["Fruta 1","Fruta 2","Fruta 3"];
       labels.forEach(function(lbl, si) {
@@ -210,24 +259,49 @@ function renderItems() {
     }
     var rowQ = document.createElement("div");
     rowQ.className = "row";
-    rowQ.innerHTML =
-      '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px">CANT.</span>'+
-      '<div class="qty-ctrl">'+
-        '<button class="qm" data-i="'+i+'">−</button>'+
-        '<span class="qty-val">'+item.cantidad+'</span>'+
-        '<button class="qp" data-i="'+i+'">+</button>'+
-      '</div>'+
-      '<span style="margin-left:auto;color:#a8e6a3;font-weight:bold;font-size:15px">$'+(getPrecioEfectivo(cat)*item.cantidad)+'</span>';
+    var precioLinea = calcularPrecioLinea(cat, item);
+    if (cat.unidad === "kg" && item.unidadVenta !== "pieza") {
+      var esGramos = item.unidadVenta === "gramos";
+      rowQ.innerHTML =
+        '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px">'+(esGramos?"GR.":"KG")+'</span>'+
+        '<input type="number" class="qty-num" data-i="'+i+'" value="'+item.cantidad+'" step="'+(esGramos?"10":"0.1")+'" min="'+(esGramos?"10":"0.1")+'">'+
+        '<span style="margin-left:auto;color:#a8e6a3;font-weight:bold;font-size:15px">$'+fmtMoney(precioLinea)+'</span>';
+    } else {
+      rowQ.innerHTML =
+        '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px">CANT.</span>'+
+        '<div class="qty-ctrl">'+
+          '<button class="qm" data-i="'+i+'">−</button>'+
+          '<span class="qty-val">'+item.cantidad+'</span>'+
+          '<button class="qp" data-i="'+i+'">+</button>'+
+        '</div>'+
+        '<span style="margin-left:auto;color:#a8e6a3;font-weight:bold;font-size:15px">$'+fmtMoney(precioLinea)+'</span>';
+    }
     div.appendChild(rowQ);
     container.appendChild(div);
   });
   container.querySelectorAll(".sel-prod").forEach(function(el){
     el.addEventListener("change", function(){
-      var i=+this.dataset.i; items[i].catId=this.value; items[i].frutas=[]; renderItems();
+      var i=+this.dataset.i; items[i]=nuevoItem(this.value); renderItems();
     });
   });
   container.querySelectorAll(".sel-fruta").forEach(function(el){
     el.addEventListener("change", function(){ items[+this.dataset.i].frutas[+this.dataset.si]=this.value; });
+  });
+  container.querySelectorAll(".unit-btn").forEach(function(el){
+    el.addEventListener("click", function(){
+      var i=+this.dataset.i, u=this.dataset.u;
+      items[i].unidadVenta = u;
+      items[i].cantidad = UNIDAD_DEFAULT_CANT[u];
+      renderItems();
+    });
+  });
+  container.querySelectorAll(".qty-num").forEach(function(el){
+    el.addEventListener("change", function(){
+      var i=+this.dataset.i;
+      var v = parseFloat(this.value);
+      items[i].cantidad = (isFinite(v) && v>0) ? v : UNIDAD_DEFAULT_CANT[items[i].unidadVenta];
+      renderItems();
+    });
   });
   container.querySelectorAll(".qm").forEach(function(el){
     el.addEventListener("click", function(){ var i=+this.dataset.i; items[i].cantidad=Math.max(1,items[i].cantidad-1); renderItems(); });
@@ -238,15 +312,21 @@ function renderItems() {
   container.querySelectorAll(".del-btn").forEach(function(el){
     el.addEventListener("click", function(){ items.splice(+this.dataset.i,1); renderItems(); });
   });
-  var total = items.reduce(function(s,it){ return s+getPrecioEfectivo(getCat(it.catId))*it.cantidad; },0);
-  document.getElementById("total").textContent = "$"+total;
+  var total = items.reduce(function(s,it){ return s+calcularPrecioLinea(getCat(it.catId),it); },0);
+  document.getElementById("total").textContent = "$"+fmtMoney(total);
 }
 
 function nombreCompleto(item) {
   var cat = getCat(item.catId);
-  if (cat.slots===0) return cat.nombre;
-  if (cat.slots===1) return cat.nombre+" · "+(item.frutas[0]||"");
-  return cat.nombre+" · "+(item.frutas.join(" + ")||"");
+  var base = cat.nombre;
+  if (cat.slots===1) base += " · "+(item.frutas[0]||"");
+  else if (cat.slots>1) base += " · "+(item.frutas.join(" + ")||"");
+  if (cat.unidad === "kg") {
+    var u = item.unidadVenta || "kg";
+    var suf = u==="kg" ? "kg" : u==="gramos" ? "g" : "pza";
+    base += " ("+trimNum(item.cantidad)+" "+suf+")";
+  }
+  return base;
 }
 
 // ─── Guardar ───
@@ -265,25 +345,26 @@ async function guardar() {
     for (var si=0;si<cat.slots;si++){
       if (!items[i].frutas[si]){ errEl.textContent="Selecciona todas las frutas del producto "+(i+1)+"."; return; }
     }
+    if (!(items[i].cantidad > 0)) { errEl.textContent="Cantidad inválida en el producto "+(i+1)+"."; return; }
   }
   btn.disabled=true; btn.textContent="Guardando...";
   try {
     var filas = items.map(function(it){
       var cat=getCat(it.catId);
       var nombre=nombreCompleto(it);
-      var precio=getPrecioEfectivo(cat);
-      var v=precio*it.cantidad; var s=cat.costo*it.cantidad;
+      var precio=precioUnitario(cat, it);
+      var v=precio*it.cantidad; var s=calcularCostoLinea(cat, it);
       return [nombre,it.cantidad,cliente,precio,v,"Pendiente",fecha,s,s,v-s,ubicacion,direccion];
     });
     await fetch(SCRIPT_URL+"?data="+encodeURIComponent(JSON.stringify(filas)),{mode:"no-cors"});
-    var total=items.reduce(function(s,it){return s+getPrecioEfectivo(getCat(it.catId))*it.cantidad;},0);
+    var total=items.reduce(function(s,it){return s+calcularPrecioLinea(getCat(it.catId),it);},0);
     document.getElementById("captura").innerHTML=
       '<div class="done-view">'+
         '<div style="font-size:70px;margin-bottom:16px">✅</div>'+
         '<h2 style="color:#a8e6a3;margin-bottom:8px">¡Pedido guardado!</h2>'+
         '<p style="color:#6b9e6b">'+items.length+' producto'+(items.length!==1?"s":"")+ ' de <strong style="color:#e8f5e8">'+cliente+'</strong></p>'+
         '<p style="color:#6b9e6b;font-size:13px;margin-top:4px">📍 '+ubicacion+(ubicacion==="General"&&direccion?' — '+direccion:'')+'</p>'+
-        '<p style="color:#a8e6a3;font-size:28px;font-weight:bold;margin:8px 0">$'+total+'</p>'+
+        '<p style="color:#a8e6a3;font-size:28px;font-weight:bold;margin:8px 0">$'+fmtMoney(total)+'</p>'+
         '<p style="color:#4a7a4a;font-size:12px">Revisa tu Google Sheet ✓</p>'+
         '<button class="new-btn" id="newBtn">+ Nuevo pedido</button>'+
       '</div>';

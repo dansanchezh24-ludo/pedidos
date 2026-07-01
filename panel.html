@@ -542,6 +542,14 @@ function renderTablero() {
       });
       html += '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+pm.totalesFruta[fr].toFixed(0)+'</td></tr>';
     });
+    var totalGeneral = 0;
+    html += '<tr class="total-row"><td>TOTAL</td>';
+    pm.meses.forEach(function(m){
+      var totalMes = pm.frutas.reduce(function(s,fr){ return s+pm.datos[fr][m]; },0);
+      totalGeneral += totalMes;
+      html += '<td style="text-align:right">$'+totalMes.toFixed(0)+'</td>';
+    });
+    html += '<td style="text-align:right">$'+totalGeneral.toFixed(0)+'</td></tr>';
     html += '</tbody></table></div></div>';
   }
 

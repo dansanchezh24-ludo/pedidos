@@ -64,14 +64,16 @@ var HIST_COSTO_PROVEEDOR = {
   "Blueberry chica bote": [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
   "Blueberry grande":     [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
   "Fresa":                [ {desde:"2026-06-29", costo:50} ],
+  "Cereza":               [ {desde:"2026-06-30", costo:70} ],
+};
+// Se compran por clamshell individual, sin conversión a botes de 3 — cada clamshell
+// cuesta lo mismo sin importar si se vende suelto o dentro de Ludo Tomatizado/Ludo Fresh
+// (que empaquetan 3 clamshells de cherry cada uno).
+var HIST_COSTO_PROVEEDOR_CLAMSHELL = {
+  "Higo":                 [ {desde:"2026-06-30", costo:60} ],
   "Cherry rojo":          [ {desde:"2026-06-29", costo:20} ],
   "Cherry amarillo":      [ {desde:"2026-06-29", costo:20} ],
   "Tomate cherry kumato": [ {desde:"2026-06-29", costo:20} ],
-  "Cereza":               [ {desde:"2026-06-30", costo:70} ],
-};
-// Higo se compra por clamshell (sin conversión a botes, como los cherries lo harían si vinieran así).
-var HIST_COSTO_PROVEEDOR_CLAMSHELL = {
-  "Higo": [ {desde:"2026-06-30", costo:60} ],
 };
 var HIST_COSTO_PROVEEDOR_KG = {
   "Blueberry chica kg": [ {desde:"2000-01-01", costo:40} ],

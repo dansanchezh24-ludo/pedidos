@@ -112,6 +112,27 @@ function normalizarFruta(nombre) {
   return ALIAS_FRUTAS[nombre] || nombre;
 }
 
+// Nombres viejos de productos (no frutas) que cambiaron de nombre pero siguen
+// costeándose igual — ej. "Ludo Antojo" es el nombre viejo de "Elote Select".
+var ALIAS_PRODUCTOS = {
+  "Ludo Antojo": "Elote Select",
+};
+function normalizarProducto(nombre) {
+  return ALIAS_PRODUCTOS[nombre] || nombre;
+}
+
+// Fruta/ingrediente base de cada producto de elote — todos los paquetes Ludo
+// se hacen con elote amarillo; "Elote amarillo"/"Elote blanco" son ellos mismos.
+var ELOTE_FRUTA = {
+  "Elote amarillo":  "Elote amarillo",
+  "Elote blanco":    "Elote blanco",
+  "Elote Select":    "Elote amarillo",
+  "Ludo Duo":        "Elote amarillo",
+  "Ludo Elotiza":    "Elote amarillo",
+  "Ludo Parrillada": "Elote amarillo",
+  "Ludo Fiesta":     "Elote amarillo",
+};
+
 function costoVigente(historial, fecha) {
   if (!historial || !historial.length) return { costo:0, desde:null };
   var activo = historial[0];

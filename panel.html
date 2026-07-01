@@ -269,6 +269,14 @@ function calcularKPIsGlobal(datos) {
   });
 
   var productosVendidos = datos.reduce(function(s,r){ return s+(parseFloat(r[1])||0); },0);
+  // Desglose por presentación — sumar botes con botes, clamshells con clamshells, etc.
+  // en vez de un solo total que mezcla unidades sin sentido (kg + piezas + botes...).
+  var porPresentacion = {};
+  datos.forEach(function(r){
+    filasVenta(r).forEach(function(f){
+      porPresentacion[f.presentacion] = (porPresentacion[f.presentacion] || 0) + f.cantidad;
+    });
+  });
   var clientesSet = {};
   var porUbicacion = {};
   datos.forEach(function(r){
@@ -282,6 +290,7 @@ function calcularKPIsGlobal(datos) {
     pagoProveedorTotal: pagoProveedorTotal,
     utilidadNeta: ventasTotales - pagoProveedorTotal,
     productosVendidos: productosVendidos,
+    porPresentacion: porPresentacion,
     numClientes: Object.keys(clientesSet).length,
     numPedidos: datos.length,
     numFechas: Object.keys(porFecha).length,
@@ -289,71 +298,127 @@ function calcularKPIsGlobal(datos) {
   };
 }
 
-function calcularVentasPorFruta(datos) {
-  var frutas = {};
-  var elotes = {};
-  var piezas = {};
-  var mercado = {};
-  var otros = {};
+/**
+ * Tabla de ventas por fruta/producto: una fila por combinación
+ * (fruta, nombre comercial, presentación), con cantidad e importe vendido
+ * sumados. Cubre todo el catálogo — a diferencia de calcularVentasPorFruta,
+ * aquí "cantidad" e "importe" son siempre los de la línea de pedido tal cual
+ * se vendió (sin conversión a cajas/botes), para que se pueda leer como
+ * reporte de ventas y no de compra a proveedor.
+ */
+// Blueberry/Frambuesa/Zarzamora vendidas directas (no dentro de Ludo Select/Pack/Mix)
+// siempre son bote, nunca clamshell — así se etiquetan en la tabla de ventas.
+var NOMBRE_BOTE_DIRECTO = { "Blueberry":"Bote Blueberry", "Frambuesa":"Bote Frambuesa", "Zarzamora":"Bote Zarzamora" };
+// Elote amarillo y Elote Select son el mismo producto (varió el nombre con el tiempo);
+// todos los elotes (amarillo y blanco) se venden en charola, no por pieza suelta.
+var ELOTE_NOMBRE_COMERCIAL = { "Elote amarillo":"Elote Select", "Elote Select":"Elote Select", "Elote blanco":"Elote blanco" };
+
+/**
+ * Extrae de una fila de Sheets un arreglo de {fruta, nombreComercial, presentacion,
+ * cantidad, importe, mes} — un elemento por cada fruta involucrada. "cantidad" es
+ * la cantidad real de esa presentación por fruta (ej. Ludo Pack = 3 clamshells de
+ * la fruta elegida por cada unidad vendida; Familiar 2x = 1 bote de cada una de
+ * las 2 frutas elegidas). "importe" se reparte entre las frutas de una misma venta
+ * para que la suma total no se duplique. Es el punto único de clasificación
+ * reutilizado por la tabla de detalle y por el resumen mensual.
+ */
+function filasVenta(r) {
+  var nombreRaw = r[0] || "";
+  var qty = parseFloat(r[1]) || 1;
+  var precioU = parseFloat(r[3]) || 0;
+  var fecha = fmtFecha(r[6]);
+  var mes = (fecha !== "Sin fecha") ? fecha.slice(0,7) : "Sin fecha";
+  var importeTotal = precioU * qty;
+  var p = parsearProducto(nombreRaw, qty);
+
+  if (!p.tipo) {
+    return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", cantidad:qty, importe:importeTotal, mes:mes }];
+  }
+  if (p.tipo === "elote") {
+    var en = p.frutas[0];
+    return [{ fruta: ELOTE_FRUTA[en] || en, nombreComercial: ELOTE_NOMBRE_COMERCIAL[en] || en, presentacion:"charola", cantidad:qty, importe:importeTotal, mes:mes }];
+  }
+  if (p.tipo === "pieza_directa") {
+    var pn = p.frutas[0];
+    return [{ fruta:pn, nombreComercial:pn, presentacion:"pieza", cantidad:qty, importe:importeTotal, mes:mes }];
+  }
+  if (p.tipo === "mercado_kg") {
+    var mn = p.frutas[0];
+    var suf = parseSufijoUnidad(nombreRaw);
+    var unidadLbl = suf.unidad === "gramos" ? "gramos" : suf.unidad === "pieza" ? "pieza" : "kg";
+    return [{ fruta:mn, nombreComercial:mn, presentacion:unidadLbl, cantidad:qty, importe:importeTotal, mes:mes }];
+  }
+  if (p.tipo === "fruta_suelta") {
+    var fn = p.frutas[0];
+    var multFS = p.mult || 1;
+    if (NOMBRE_BOTE_DIRECTO[fn]) {
+      return [{ fruta:fn, nombreComercial:NOMBRE_BOTE_DIRECTO[fn], presentacion:"bote", cantidad:qty*multFS, importe:importeTotal, mes:mes }];
+    }
+    var presFS = fn === "Cereza" ? "bote" : "clamshell";
+    return [{ fruta:fn, nombreComercial:nombreRaw, presentacion:presFS, cantidad:qty*multFS, importe:importeTotal, mes:mes }];
+  }
+  if (p.tipo === "clamshell") {
+    var nomC = nombreRaw.split("·")[0].trim();
+    var multC = p.mult || 1;
+    var frutasC = p.frutas.filter(Boolean);
+    if (!frutasC.length) return [{ fruta:"(sin fruta)", nombreComercial:nomC, presentacion:"clamshell", cantidad:qty*multC, importe:importeTotal, mes:mes }];
+    var importeC = importeTotal / frutasC.length;
+    return frutasC.map(function(fn){
+      return { fruta:fn, nombreComercial:nomC, presentacion:"clamshell", cantidad:qty*multC, importe:importeC, mes:mes };
+    });
+  }
+  if (p.tipo === "familiar") {
+    var nomF = nombreRaw.split("·")[0].trim();
+    var frutasF = p.frutas.filter(Boolean);
+    if (!frutasF.length) return [{ fruta:"(sin fruta)", nombreComercial:nomF, presentacion:"bote", cantidad:qty, importe:importeTotal, mes:mes }];
+    var importeF = importeTotal / frutasF.length;
+    return frutasF.map(function(fn){
+      return { fruta:fn, nombreComercial:nomF, presentacion:"bote", cantidad:qty, importe:importeF, mes:mes };
+    });
+  }
+  return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", cantidad:qty, importe:importeTotal, mes:mes }];
+}
+
+function calcularTablaVentas(datos) {
+  var filas = {}; // key "fruta||nombreComercial||presentacion" -> {fruta,nombreComercial,presentacion,cantidad,importe}
   datos.forEach(function(r) {
-    var nombreRaw = r[0] || "";
-    var qty = parseFloat(r[1]) || 1;
-    var precioU = parseFloat(r[3]) || 0;
-    var fecha = fmtFecha(r[6]);
-    var p = parsearProducto(nombreRaw, qty);
-    if (!p.tipo) {
-      if (!otros[nombreRaw]) otros[nombreRaw] = { unidades:0, venta:0 };
-      otros[nombreRaw].unidades += qty;
-      otros[nombreRaw].venta += precioU * qty;
-      return;
-    }
-
-    if (p.tipo === "elote") {
-      var en = p.frutas[0];
-      if (!elotes[en]) elotes[en] = { unidades:0, venta:0 };
-      elotes[en].unidades += qty;
-      elotes[en].venta += precioU * qty;
-
-    } else if (p.tipo === "pieza_directa") {
-      var pn = p.frutas[0];
-      if (!piezas[pn]) piezas[pn] = { unidades:0, venta:0 };
-      piezas[pn].unidades += qty;
-      piezas[pn].venta += precioU * qty;
-
-    } else if (p.tipo === "mercado_kg") {
-      var mn = p.frutas[0];
-      if (!mercado[mn]) mercado[mn] = { kg:0, venta:0 };
-      mercado[mn].kg += p.kgEquivalente;
-      mercado[mn].venta += precioU * qty;
-
-    } else if (p.tipo === "fruta_suelta") {
-      var fn = p.frutas[0];
-      var multFS = p.mult || 1;
-      if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: emojiDeFruta(fn) };
-      frutas[fn].clamshells += HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn) ? qty * multFS : qty * multFS * CAJAS_POR_BOTE;
-      frutas[fn].venta += precioU * qty;
-
-    } else if (p.tipo === "clamshell") {
-      var cajas = qty * (p.mult || 1);
-      var ventaUnitaria = (precioU * qty) / (p.frutas.length || 1);
-      p.frutas.forEach(function(fn) {
-        if (!fn || !isBerry(fn)) return;
-        if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: emojiDeFruta(fn) };
-        frutas[fn].clamshells += cajas;
-        frutas[fn].venta += ventaUnitaria;
-      });
-
-    } else if (p.tipo === "familiar") {
-      var ventaUnitaria = (precioU * qty) / (p.frutas.length || 1);
-      p.frutas.forEach(function(fn) {
-        if (!fn || !isBerry(fn)) return;
-        if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: emojiDeFruta(fn) };
-        frutas[fn].clamshells += qty * CAJAS_POR_BOTE;
-        frutas[fn].venta += ventaUnitaria;
-      });
-    }
+    filasVenta(r).forEach(function(f){
+      var key = f.fruta + "||" + f.nombreComercial + "||" + f.presentacion;
+      if (!filas[key]) filas[key] = { fruta:f.fruta, nombreComercial:f.nombreComercial, presentacion:f.presentacion, cantidad:0, importe:0 };
+      filas[key].cantidad += f.cantidad;
+      filas[key].importe += f.importe;
+    });
   });
-  return { frutas: frutas, elotes: elotes, piezas: piezas, mercado: mercado, otros: otros };
+  return Object.values(filas).sort(function(a,b){
+    return a.fruta === b.fruta ? a.nombreComercial.localeCompare(b.nombreComercial) : a.fruta.localeCompare(b.fruta);
+  });
+}
+
+/**
+ * Matriz fruta × mes con el importe vendido de cada fruta en cada mes.
+ * Regresa { frutas:[...ordenadas por total desc], meses:[...ordenados asc],
+ *           datos: { fruta: { mes: importe } }, totalesFruta: { fruta: total } }
+ */
+function calcularVentasPorMes(datos) {
+  var celdas = {}; // "fruta||mes" -> importe
+  var totalesFruta = {};
+  var mesesSet = {};
+  datos.forEach(function(r) {
+    filasVenta(r).forEach(function(f){
+      var key = f.fruta + "||" + f.mes;
+      celdas[key] = (celdas[key] || 0) + f.importe;
+      totalesFruta[f.fruta] = (totalesFruta[f.fruta] || 0) + f.importe;
+      mesesSet[f.mes] = true;
+    });
+  });
+  var frutas = Object.keys(totalesFruta).sort(function(a,b){ return totalesFruta[b] - totalesFruta[a]; });
+  var meses = Object.keys(mesesSet).filter(function(m){ return m !== "Sin fecha"; }).sort();
+  var datosMatriz = {};
+  frutas.forEach(function(fr){
+    datosMatriz[fr] = {};
+    meses.forEach(function(m){ datosMatriz[fr][m] = celdas[fr+"||"+m] || 0; });
+  });
+  return { frutas:frutas, meses:meses, datos:datosMatriz, totalesFruta:totalesFruta };
 }
 
 function kpiCard(label, val, cls) {
@@ -361,6 +426,16 @@ function kpiCard(label, val, cls) {
 }
 function kpiMini(label, val) {
   return '<div class="kpi-mini"><div class="kpi-mini-label">'+label+'</div><div class="kpi-mini-val">'+val+'</div></div>';
+}
+// Tarjeta KPI que desglosa una cantidad por presentación (bote/clamshell/charola/kg/pieza)
+// en vez de sumarlas todas juntas sin sentido.
+function kpiCardPresentacion(label, porPresentacion) {
+  var items = Object.keys(porPresentacion).sort(function(a,b){ return porPresentacion[b]-porPresentacion[a]; });
+  var body = items.map(function(p){
+    var v = Math.round(porPresentacion[p]*100)/100;
+    return '<div style="font-size:15px;font-weight:bold;color:#e8f5e8;line-height:1.6">'+v+' <span style="font-size:11px;color:#6b9e6b;font-weight:normal">'+p+'</span></div>';
+  }).join("");
+  return '<div class="kpi-card"><div class="kpi-label">'+label+'</div>'+(body||'<div class="kpi-val">0</div>')+'</div>';
 }
 
 function renderTablero() {
@@ -391,7 +466,7 @@ function renderTablero() {
   html += kpiCard("VENTAS TOTALES", "$"+k.ventasTotales.toFixed(0));
   html += kpiCard("PAGO A PROVEEDOR", "$"+k.pagoProveedorTotal.toFixed(0), "naranja");
   html += kpiCard("UTILIDAD NETA", "$"+k.utilidadNeta.toFixed(0), k.utilidadNeta<0 ? "rojo" : "");
-  html += kpiCard("PRODUCTOS VENDIDOS", k.productosVendidos+" pz");
+  html += kpiCardPresentacion("PRODUCTOS VENDIDOS", k.porPresentacion);
   html += '</div>';
 
   html += '<div class="kpi-mini-row">';
@@ -415,97 +490,68 @@ function renderTablero() {
     html += '</div>';
   }
 
-  // ── Ventas por fruta / producto ──
-  var vpf = calcularVentasPorFruta(datos);
-  var frutaKeys = Object.keys(vpf.frutas).sort();
-  var eloteKeys = Object.keys(vpf.elotes).sort();
-  var piezaKeys = Object.keys(vpf.piezas).sort();
-  var mercadoKeys = Object.keys(vpf.mercado).sort();
-  var otrosKeys = Object.keys(vpf.otros).sort();
-  if (frutaKeys.length || eloteKeys.length || piezaKeys.length || mercadoKeys.length || otrosKeys.length) {
-    var allVentas = frutaKeys.map(function(f){ return vpf.frutas[f].venta; })
-                             .concat(eloteKeys.map(function(e){ return vpf.elotes[e].venta; }))
-                             .concat(piezaKeys.map(function(p){ return vpf.piezas[p].venta; }))
-                             .concat(mercadoKeys.map(function(m){ return vpf.mercado[m].venta; }))
-                             .concat(otrosKeys.map(function(o){ return vpf.otros[o].venta; }));
-    var maxV = Math.max.apply(null, allVentas.concat([1]));
-    html += '<div class="kpi-block"><div class="kpi-block-title">VENTAS POR FRUTA / PRODUCTO</div>';
-    frutaKeys.forEach(function(fn) {
-      var f = vpf.frutas[fn];
-      var pct = Math.round(f.venta / maxV * 100);
-      html += '<div class="cliente-bar-row">'+
-        '<span class="cliente-bar-name">'+f.emoji+' '+fn+'</span>'+
-        '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%"></div></div>'+
-        '<span style="text-align:right;min-width:68px">'+
-          '<span style="font-size:12px;color:#a8e6a3">$'+f.venta.toFixed(0)+'</span><br>'+
-          '<span style="font-size:10px;color:#6b9e6b">'+f.clamshells+' clamshell'+(f.clamshells!==1?'s':'')+'</span>'+
-        '</span>'+
-      '</div>';
+  // ── Detalle de ventas por producto (fruta · nombre comercial · presentación) ──
+  var tabla = calcularTablaVentas(datos);
+  if (tabla.length) {
+    var totalImporte = tabla.reduce(function(s,f){ return s+f.importe; },0);
+    html += '<div class="kpi-block"><div class="kpi-block-title">DETALLE DE VENTAS POR PRODUCTO</div>';
+    html += '<table class="cliente-table"><thead><tr>'+
+      '<th>FRUTA</th><th>NOMBRE COMERCIAL</th><th>PRESENTACIÓN</th><th style="text-align:right">CANT.</th><th>IMPORTE</th>'+
+    '</tr></thead><tbody>';
+    tabla.forEach(function(f, i){
+      html += '<tr class="cliente-row" style="cursor:default">'+
+        '<td>'+f.fruta+'</td>'+
+        '<td>'+f.nombreComercial+'</td>'+
+        '<td style="color:#6b9e6b">'+f.presentacion+'</td>'+
+        '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
+        '<td>$'+f.importe.toFixed(0)+'</td>'+
+      '</tr>';
+      var esFinDeGrupo = (i === tabla.length-1) || (tabla[i+1].fruta !== f.fruta);
+      if (esFinDeGrupo) {
+        var grupo = tabla.filter(function(x){ return x.fruta === f.fruta; });
+        var subCant = grupo.reduce(function(s,x){ return s+x.cantidad; },0);
+        var subImp  = grupo.reduce(function(s,x){ return s+x.importe; },0);
+        html += '<tr class="detail-row" style="background:rgba(76,175,80,0.08)">'+
+          '<td colspan="3" style="font-weight:bold;color:#a8e6a3">Subtotal '+f.fruta+'</td>'+
+          '<td style="text-align:right;font-weight:bold;color:#a8e6a3">'+(Math.round(subCant*100)/100)+'</td>'+
+          '<td style="font-weight:bold;color:#a8e6a3">$'+subImp.toFixed(0)+'</td>'+
+        '</tr>';
+      }
     });
-    if (eloteKeys.length) {
-      html += '<div style="font-size:9px;color:#6b9e6b;letter-spacing:1.5px;margin:10px 0 6px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.1)">ELOTES</div>';
-      eloteKeys.forEach(function(en) {
-        var e = vpf.elotes[en];
-        var pct = Math.round(e.venta / maxV * 100);
-        html += '<div class="cliente-bar-row">'+
-          '<span class="cliente-bar-name">🌽 '+en+'</span>'+
-          '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>'+
-          '<span style="text-align:right;min-width:68px">'+
-            '<span style="font-size:12px;color:#fbbf24">$'+e.venta.toFixed(0)+'</span><br>'+
-            '<span style="font-size:10px;color:#6b9e6b">'+e.unidades+' paq</span>'+
-          '</span>'+
-        '</div>';
+    html += '<tr class="total-row"><td colspan="4">TOTAL</td><td>$'+totalImporte.toFixed(0)+'</td></tr>';
+    html += '</tbody></table></div>';
+  }
+
+  // ── Ventas por mes y fruta (tabla gráfica tipo mapa de calor) ──
+  var pm = calcularVentasPorMes(datos);
+  if (pm.frutas.length && pm.meses.length) {
+    var maxCelda = 0;
+    pm.frutas.forEach(function(fr){ pm.meses.forEach(function(m){ maxCelda = Math.max(maxCelda, pm.datos[fr][m]); }); });
+    html += '<div class="kpi-block"><div class="kpi-block-title">VENTAS POR MES Y FRUTA</div>';
+    html += '<div style="overflow-x:auto"><table class="cliente-table" style="white-space:nowrap">';
+    html += '<thead><tr><th>FRUTA</th>';
+    pm.meses.forEach(function(m){ html += '<th style="text-align:right">'+fmtMesLabel(m)+'</th>'; });
+    html += '<th style="text-align:right">TOTAL</th></tr></thead><tbody>';
+    pm.frutas.forEach(function(fr){
+      html += '<tr class="cliente-row" style="cursor:default"><td>'+fr+'</td>';
+      pm.meses.forEach(function(m){
+        var v = pm.datos[fr][m];
+        var pct = maxCelda>0 ? v/maxCelda*100 : 0;
+        var bg = v>0 ? 'rgba(76,175,80,'+(0.08+0.35*pct/100).toFixed(2)+')' : 'transparent';
+        html += '<td style="text-align:right;background:'+bg+'">'+(v>0?'$'+v.toFixed(0):'—')+'</td>';
       });
-    }
-    if (piezaKeys.length) {
-      html += '<div style="font-size:9px;color:#6b9e6b;letter-spacing:1.5px;margin:10px 0 6px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.1)">PIEZAS</div>';
-      piezaKeys.forEach(function(pn) {
-        var p = vpf.piezas[pn];
-        var pct = Math.round(p.venta / maxV * 100);
-        html += '<div class="cliente-bar-row">'+
-          '<span class="cliente-bar-name">'+emojiDeFruta(pn)+' '+pn+'</span>'+
-          '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>'+
-          '<span style="text-align:right;min-width:68px">'+
-            '<span style="font-size:12px;color:#fbbf24">$'+p.venta.toFixed(0)+'</span><br>'+
-            '<span style="font-size:10px;color:#6b9e6b">'+p.unidades+' pz</span>'+
-          '</span>'+
-        '</div>';
-      });
-    }
-    if (mercadoKeys.length) {
-      html += '<div style="font-size:9px;color:#6b9e6b;letter-spacing:1.5px;margin:10px 0 6px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.1)">MERCADO (KG)</div>';
-      mercadoKeys.forEach(function(mn) {
-        var m = vpf.mercado[mn];
-        var pct = Math.round(m.venta / maxV * 100);
-        html += '<div class="cliente-bar-row">'+
-          '<span class="cliente-bar-name">'+emojiDeFruta(mn)+' '+mn+'</span>'+
-          '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>'+
-          '<span style="text-align:right;min-width:68px">'+
-            '<span style="font-size:12px;color:#fbbf24">$'+m.venta.toFixed(0)+'</span><br>'+
-            '<span style="font-size:10px;color:#6b9e6b">'+m.kg.toFixed(2)+' kg</span>'+
-          '</span>'+
-        '</div>';
-      });
-    }
-    if (otrosKeys.length) {
-      html += '<div style="font-size:9px;color:#6b9e6b;letter-spacing:1.5px;margin:10px 0 6px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.1)">OTROS</div>';
-      otrosKeys.forEach(function(pn) {
-        var o = vpf.otros[pn];
-        var pct = Math.round(o.venta / maxV * 100);
-        html += '<div class="cliente-bar-row">'+
-          '<span class="cliente-bar-name">📦 '+pn+'</span>'+
-          '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>'+
-          '<span style="text-align:right;min-width:68px">'+
-            '<span style="font-size:12px;color:#fbbf24">$'+o.venta.toFixed(0)+'</span><br>'+
-            '<span style="font-size:10px;color:#6b9e6b">'+o.unidades+' u</span>'+
-          '</span>'+
-        '</div>';
-      });
-    }
-    html += '</div>';
+      html += '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+pm.totalesFruta[fr].toFixed(0)+'</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
   }
 
   container.innerHTML = html;
+}
+
+function fmtMesLabel(m) {
+  var partes = m.split("-");
+  var meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  return meses[parseInt(partes[1],10)-1] + " " + partes[0].slice(2);
 }
 
 // ═══════════════════════════════════════════
@@ -643,9 +689,11 @@ function parsearProducto(nombreRaw, cantidad) {
     if (partes.length > 1) {
       frutas = partes[1].trim().split("+").map(function(f){ return normalizarFruta(f.trim()); });
     }
-  } else if (HIST_COSTO_ELOTE.hasOwnProperty(nombreRaw)) {
+  } else if (HIST_COSTO_ELOTE.hasOwnProperty(normalizarProducto(nombreRaw))) {
+    // "Ludo Antojo" es el nombre viejo de "Elote Select" — se normaliza para
+    // costearse y agruparse junto con las ventas actuales del mismo producto.
     tipo = "elote";
-    frutas = [nombreRaw];
+    frutas = [normalizarProducto(nombreRaw)];
   } else if (HIST_COSTO_PIEZA.hasOwnProperty(nombreRaw)) {
     // Productos de Ludo Mercado vendidos por pieza fija (coco, pitahaya).
     tipo = "pieza_directa";

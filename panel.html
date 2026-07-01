@@ -294,13 +294,19 @@ function calcularVentasPorFruta(datos) {
   var elotes = {};
   var piezas = {};
   var mercado = {};
+  var otros = {};
   datos.forEach(function(r) {
     var nombreRaw = r[0] || "";
     var qty = parseFloat(r[1]) || 1;
     var precioU = parseFloat(r[3]) || 0;
     var fecha = fmtFecha(r[6]);
     var p = parsearProducto(nombreRaw, qty);
-    if (!p.tipo) return;
+    if (!p.tipo) {
+      if (!otros[nombreRaw]) otros[nombreRaw] = { unidades:0, venta:0 };
+      otros[nombreRaw].unidades += qty;
+      otros[nombreRaw].venta += precioU * qty;
+      return;
+    }
 
     if (p.tipo === "elote") {
       var en = p.frutas[0];
@@ -346,7 +352,7 @@ function calcularVentasPorFruta(datos) {
       });
     }
   });
-  return { frutas: frutas, elotes: elotes, piezas: piezas, mercado: mercado };
+  return { frutas: frutas, elotes: elotes, piezas: piezas, mercado: mercado, otros: otros };
 }
 
 function kpiCard(label, val, cls) {
@@ -414,11 +420,13 @@ function renderTablero() {
   var eloteKeys = Object.keys(vpf.elotes).sort();
   var piezaKeys = Object.keys(vpf.piezas).sort();
   var mercadoKeys = Object.keys(vpf.mercado).sort();
-  if (frutaKeys.length || eloteKeys.length || piezaKeys.length || mercadoKeys.length) {
+  var otrosKeys = Object.keys(vpf.otros).sort();
+  if (frutaKeys.length || eloteKeys.length || piezaKeys.length || mercadoKeys.length || otrosKeys.length) {
     var allVentas = frutaKeys.map(function(f){ return vpf.frutas[f].venta; })
                              .concat(eloteKeys.map(function(e){ return vpf.elotes[e].venta; }))
                              .concat(piezaKeys.map(function(p){ return vpf.piezas[p].venta; }))
-                             .concat(mercadoKeys.map(function(m){ return vpf.mercado[m].venta; }));
+                             .concat(mercadoKeys.map(function(m){ return vpf.mercado[m].venta; }))
+                             .concat(otrosKeys.map(function(o){ return vpf.otros[o].venta; }));
     var maxV = Math.max.apply(null, allVentas.concat([1]));
     html += '<div class="kpi-block"><div class="kpi-block-title">VENTAS POR FRUTA / PRODUCTO</div>';
     frutaKeys.forEach(function(fn) {
@@ -474,6 +482,21 @@ function renderTablero() {
           '<span style="text-align:right;min-width:68px">'+
             '<span style="font-size:12px;color:#fbbf24">$'+m.venta.toFixed(0)+'</span><br>'+
             '<span style="font-size:10px;color:#6b9e6b">'+m.kg.toFixed(2)+' kg</span>'+
+          '</span>'+
+        '</div>';
+      });
+    }
+    if (otrosKeys.length) {
+      html += '<div style="font-size:9px;color:#6b9e6b;letter-spacing:1.5px;margin:10px 0 6px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.1)">OTROS</div>';
+      otrosKeys.forEach(function(pn) {
+        var o = vpf.otros[pn];
+        var pct = Math.round(o.venta / maxV * 100);
+        html += '<div class="cliente-bar-row">'+
+          '<span class="cliente-bar-name">📦 '+pn+'</span>'+
+          '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>'+
+          '<span style="text-align:right;min-width:68px">'+
+            '<span style="font-size:12px;color:#fbbf24">$'+o.venta.toFixed(0)+'</span><br>'+
+            '<span style="font-size:10px;color:#6b9e6b">'+o.unidades+' u</span>'+
           '</span>'+
         '</div>';
       });
@@ -653,6 +676,7 @@ function calcularCompraProveedor(datos, fecha) {
   var elotes  = {};
   var piezasDirectas = {};
   var mercadoKg = {};
+  var otros = {}; // cualquier producto que no encaje en las categorías de arriba
   var ventaTotal = 0;
 
   datos.forEach(function(r) {
@@ -660,10 +684,20 @@ function calcularCompraProveedor(datos, fecha) {
     var qty       = parseFloat(r[1]) || 1;
     var cliente   = r[2] || "?";
     var precioU   = parseFloat(r[3]) || 0;
+    var costoFila = parseFloat(r[7]) || 0; // Subtotal costo, ya calculado al capturar el pedido
     ventaTotal   += precioU * qty;
 
     var p = parsearProducto(nombreRaw, qty);
-    if (!p.tipo) return;
+    if (!p.tipo) {
+      // Producto sin categoría reconocida (ej. Fresa 2/3 paquetes, Ludo Tomatizado, Ludo Fresh):
+      // se usa el costo ya guardado en la fila en vez de recalcularlo, para no perderlo.
+      if (!otros[nombreRaw]) otros[nombreRaw] = { unidades:0, costoTotal:0, ventaTotal:0, clientes:[] };
+      otros[nombreRaw].unidades += qty;
+      otros[nombreRaw].costoTotal += costoFila;
+      otros[nombreRaw].ventaTotal += precioU * qty;
+      otros[nombreRaw].clientes.push({ nombre: cliente, unidades: qty });
+      return;
+    }
 
     if (p.tipo === "elote") {
       var enombre = p.frutas[0];
@@ -842,7 +876,22 @@ function calcularCompraProveedor(datos, fecha) {
     };
   });
 
-  var costoTotalProveedor = costoTotalBerries + costoTotalElotes + costoTotalPiezas + costoTotalMercado;
+  var otrosResult = {};
+  var costoTotalOtros = 0;
+  Object.keys(otros).forEach(function(pn) {
+    var o = otros[pn];
+    costoTotalOtros += o.costoTotal;
+    var cMap = {};
+    o.clientes.forEach(function(c){ cMap[c.nombre]=(cMap[c.nombre]||0)+c.unidades; });
+    otrosResult[pn] = {
+      unidades: o.unidades,
+      costoTotal: +o.costoTotal.toFixed(2),
+      ventaTotal: +o.ventaTotal.toFixed(2),
+      clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], unidades:e[1]}; })
+    };
+  });
+
+  var costoTotalProveedor = costoTotalBerries + costoTotalElotes + costoTotalPiezas + costoTotalMercado + costoTotalOtros;
   var gananciaNeta = ventaTotal - costoTotalProveedor;
 
   return {
@@ -850,6 +899,7 @@ function calcularCompraProveedor(datos, fecha) {
     elotes: elotesResult,
     piezas: piezasResult,
     mercadoKg: mercadoKgResult,
+    otros: otrosResult,
     ventaTotal: ventaTotal,
     costoTotalProveedor: costoTotalProveedor,
     gananciaNeta: gananciaNeta
@@ -874,7 +924,7 @@ function renderProveedor() {
   }
 
   var calc = calcularCompraProveedor(datos, filtro);
-  var B = calc.berries, E = calc.elotes, P = calc.piezas, M = calc.mercadoKg;
+  var B = calc.berries, E = calc.elotes, P = calc.piezas, M = calc.mercadoKg, O = calc.otros;
 
   // ── Resumen superior ──
   var gnClass = calc.gananciaNeta < 0 ? "rojo" : "";
@@ -1043,6 +1093,33 @@ function renderProveedor() {
     container.appendChild(mcard);
   }
 
+  // ── Tarjeta "Otros" (productos sin categoría específica, ej. paquetes o combos
+  //     no reconocidos por nombre — usa el costo ya guardado en cada pedido) ──
+  if (Object.keys(O).length > 0) {
+    var ocard = document.createElement("div");
+    ocard.className = "elote-card";
+    var ototal = Object.values(O).reduce(function(s,o){return s+o.costoTotal;},0);
+    ocard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">📦 Otros</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+ototal.toFixed(0)+'</span></div>';
+    Object.keys(O).sort().forEach(function(pn){
+      var o = O[pn];
+      var orow = document.createElement("div");
+      orow.className = "elote-row";
+      orow.innerHTML =
+        '<div>'+
+          '<div style="color:#e8f5e8">'+pn+'</div>'+
+          '<div style="color:#6b9e6b;font-size:11px;margin-top:3px">'+
+            o.clienteDetalle.map(function(cd){return cd.nombre+': '+cd.unidades;}).join(' · ')+
+          '</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="color:#ffcc02;font-weight:bold">'+o.unidades+' × costo guardado</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+o.costoTotal.toFixed(2)+'</div>'+
+        '</div>';
+      ocard.appendChild(orow);
+    });
+    container.appendChild(ocard);
+  }
+
   // ── Bloque "Pedido para proveedor" ──
   var pedidoBox = document.createElement("div");
   pedidoBox.className = "pedido-box";
@@ -1073,6 +1150,10 @@ function renderProveedor() {
   Object.keys(M).sort().forEach(function(mn){
     var m = M[mn];
     lineas.push(mn+": "+m.kgNecesarios+" kg — $"+m.costoTotal.toFixed(2));
+  });
+  Object.keys(O).sort().forEach(function(pn){
+    var o = O[pn];
+    lineas.push(pn+": "+o.unidades+" — $"+o.costoTotal.toFixed(2));
   });
   lineas.push("");
   lineas.push("Total a pagar: $"+calc.costoTotalProveedor.toFixed(0));
@@ -1123,6 +1204,13 @@ function renderProveedor() {
     lineasHTML += '<div class="pedido-line">'+
       '<span class="pedido-fruta">'+emojiDeFruta(mn)+' '+mn+'<span class="pedido-cant">'+m.kgNecesarios+' kg</span></span>'+
       '<span class="pedido-costo">$'+m.costoTotal.toFixed(2)+'</span>'+
+    '</div>';
+  });
+  Object.keys(O).sort().forEach(function(pn){
+    var o = O[pn];
+    lineasHTML += '<div class="pedido-line">'+
+      '<span class="pedido-fruta">📦 '+pn+'<span class="pedido-cant">'+o.unidades+'</span></span>'+
+      '<span class="pedido-costo">$'+o.costoTotal.toFixed(2)+'</span>'+
     '</div>';
   });
   var totalHTML = '<div class="pedido-total-row"><span>TOTAL A PAGAR</span><span>$'+calc.costoTotalProveedor.toFixed(0)+'</span></div>';

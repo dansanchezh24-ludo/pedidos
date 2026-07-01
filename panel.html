@@ -328,8 +328,9 @@ function calcularVentasPorFruta(datos) {
 
     } else if (p.tipo === "fruta_suelta") {
       var fn = p.frutas[0];
+      var multFS = p.mult || 1;
       if (!frutas[fn]) frutas[fn] = { clamshells:0, venta:0, emoji: emojiDeFruta(fn) };
-      frutas[fn].clamshells += HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn) ? qty : qty * CAJAS_POR_BOTE;
+      frutas[fn].clamshells += HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn) ? qty * multFS : qty * multFS * CAJAS_POR_BOTE;
       frutas[fn].venta += precioU * qty;
 
     } else if (p.tipo === "clamshell") {
@@ -631,6 +632,11 @@ function parsearProducto(nombreRaw, cantidad) {
     if (partes.length > 1) {
       frutas = partes[1].trim().split("+").map(function(f){ return normalizarFruta(f.trim()); });
     }
+  } else if (nombreRaw === "Fresa 2 paquetes" || nombreRaw === "Fresa 3 paquetes") {
+    // Paquetes de fresa = N unidades de "Fresa" empaquetadas en una sola línea de pedido
+    tipo = "fruta_suelta";
+    frutas = ["Fresa"];
+    mult = nombreRaw === "Fresa 2 paquetes" ? 2 : 3;
   } else if (nombreRaw.indexOf("Familiar (bote)") !== -1) {
     tipo = "familiar";
     var partes = nombreRaw.split("·");
@@ -689,8 +695,9 @@ function calcularCompraProveedor(datos, fecha) {
 
     var p = parsearProducto(nombreRaw, qty);
     if (!p.tipo) {
-      // Producto sin categoría reconocida (ej. Fresa 2/3 paquetes, Ludo Tomatizado, Ludo Fresh):
-      // se usa el costo ya guardado en la fila en vez de recalcularlo, para no perderlo.
+      // Producto sin categoría reconocida (ej. un rename viejo en Sheets, o un producto nuevo
+      // que aún no se conecta a ninguna categoría): se usa el costo ya guardado en la fila
+      // en vez de recalcularlo, para no perderlo.
       if (!otros[nombreRaw]) otros[nombreRaw] = { unidades:0, costoTotal:0, ventaTotal:0, clientes:[] };
       otros[nombreRaw].unidades += qty;
       otros[nombreRaw].costoTotal += costoFila;
@@ -719,13 +726,15 @@ function calcularCompraProveedor(datos, fecha) {
 
     } else if (p.tipo === "fruta_suelta") {
       var fn = p.frutas[0];
+      var multFS = p.mult || 1;
       if (!berries[fn]) berries[fn] = { cajas:0, cajasF:0, cajasC:0, clientes:[] };
       if (HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn)) {
-        berries[fn].cajas += qty;
-        berries[fn].cajasC += qty;
-        berries[fn].clientes.push({ nombre: cliente, cajasF: 0, cajasC: qty });
+        var cajasAporteC = qty * multFS;
+        berries[fn].cajas += cajasAporteC;
+        berries[fn].cajasC += cajasAporteC;
+        berries[fn].clientes.push({ nombre: cliente, cajasF: 0, cajasC: cajasAporteC });
       } else {
-        var cajasAporte = qty * CAJAS_POR_BOTE;
+        var cajasAporte = qty * multFS * CAJAS_POR_BOTE;
         berries[fn].cajas += cajasAporte;
         berries[fn].cajasF += cajasAporte;
         berries[fn].clientes.push({ nombre: cliente, cajasF: cajasAporte, cajasC: 0 });

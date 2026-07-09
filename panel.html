@@ -665,6 +665,7 @@ function renderTablero() {
     var totalImporte = grupos.reduce(function(s,g){ return s+g.importe; },0);
     var totalCosto = grupos.reduce(function(s,g){ return s+g.costo; },0);
     var totalUtilidad = totalImporte - totalCosto;
+    var totalPct = totalImporte > 0 ? (totalUtilidad / totalImporte * 100) : 0;
 
     var comparadoresDetalle = {
       alfabetico:   function(a,b){ return a.fruta.localeCompare(b.fruta); },
@@ -686,43 +687,47 @@ function renderTablero() {
       '</select>'+
     '</div>';
     html += '<div style="overflow-x:auto"><table class="cliente-table" style="white-space:nowrap"><thead><tr>'+
-      '<th>FRUTA</th><th>NOMBRE COMERCIAL</th><th>PRESENTACIÓN</th>'+
+      '<th>PRODUCTO</th><th>PRESENTACIÓN</th>'+
       '<th style="text-align:right">CANT.</th><th style="text-align:right">IMPORTE</th>'+
-      '<th style="text-align:right">COSTO</th><th style="text-align:right">UTILIDAD</th>'+
+      '<th style="text-align:right">COSTO</th><th style="text-align:right">UTILIDAD</th><th style="text-align:right">% UTIL.</th>'+
     '</tr></thead><tbody>';
 
     grupos.forEach(function(g){
       var abierto = !!frutaExpandida[g.fruta];
       var utilStyle = g.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
+      var pctGrupo = g.importe > 0 ? (g.utilidad / g.importe * 100) : 0;
       html += '<tr class="cliente-row fruta-group-row" data-fruta="'+g.fruta.replace(/"/g,"&quot;")+'">'+
-        '<td colspan="3" style="font-weight:bold;color:#e8f5e8">'+(abierto?"▲":"▼")+' '+g.fruta+' <span class="cliente-sub">'+g.rows.length+' producto'+(g.rows.length!==1?"s":"")+'</span></td>'+
+        '<td colspan="2" style="font-weight:bold;color:#e8f5e8">'+(abierto?"▲":"▼")+' '+g.fruta+' <span class="cliente-sub">'+g.rows.length+' producto'+(g.rows.length!==1?"s":"")+'</span></td>'+
         '<td style="text-align:right;color:#6b9e6b">—</td>'+
         '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+g.importe.toFixed(0)+'</td>'+
         '<td style="text-align:right;color:#ffb74d">$'+g.costo.toFixed(0)+'</td>'+
         '<td style="text-align:right;font-weight:bold;'+utilStyle+'">$'+g.utilidad.toFixed(0)+'</td>'+
+        '<td style="text-align:right;font-weight:bold;'+utilStyle+'">'+pctGrupo.toFixed(0)+'%</td>'+
       '</tr>';
       if (abierto) {
         g.rows.forEach(function(f){
           var costoFila = g.importe > 0 ? (f.importe / g.importe) * g.costo : 0;
           var utilFila = f.importe - costoFila;
+          var pctFila = f.importe > 0 ? (utilFila / f.importe * 100) : 0;
           html += '<tr class="detail-row">'+
-            '<td></td>'+
             '<td>'+f.nombreComercial+'</td>'+
             '<td style="color:#6b9e6b">'+f.presentacion+'</td>'+
             '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
             '<td style="text-align:right">$'+f.importe.toFixed(0)+'</td>'+
             '<td style="text-align:right;color:#ffb74d">$'+costoFila.toFixed(0)+'</td>'+
             '<td style="text-align:right">$'+utilFila.toFixed(0)+'</td>'+
+            '<td style="text-align:right">'+pctFila.toFixed(0)+'%</td>'+
           '</tr>';
         });
       }
     });
 
     html += '<tr class="total-row">'+
-      '<td colspan="4">TOTAL</td>'+
+      '<td colspan="3">TOTAL</td>'+
       '<td style="text-align:right">$'+totalImporte.toFixed(0)+'</td>'+
       '<td style="text-align:right">$'+totalCosto.toFixed(0)+'</td>'+
       '<td style="text-align:right">$'+totalUtilidad.toFixed(0)+'</td>'+
+      '<td style="text-align:right">'+totalPct.toFixed(0)+'%</td>'+
     '</tr>';
     html += '</tbody></table></div></div>';
   }

@@ -1,5 +1,10 @@
 // config.js — Configuración compartida entre index.html y panel.html
 // Para actualizar precios: editar AQUÍ. No tocar index.html ni panel.html.
+// IMPORTANTE: GitHub Pages no manda cache-control, así que los navegadores
+// pueden quedarse con una copia vieja de este archivo. Cada vez que edites
+// config.js, sube también el "?v=..." del <script src="config.js?v=..."> en
+// panel.html E index.html (cualquier texto nuevo sirve, ej. la fecha de hoy),
+// si no el cambio no se va a ver hasta que el usuario limpie caché a mano.
 
 var FRUTAS = ["Zarzamora","Frambuesa","Blueberry"];
 var FRUTAS_CHERRY = ["Cherry rojo","Cherry amarillo","Cherry kumato"];

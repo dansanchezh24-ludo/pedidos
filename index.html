@@ -121,14 +121,17 @@ function getFrutasDisponibles(catId) {
   });
 }
 
-var MERCADO = ["limon_persa","tuna","maracuya","rambutan","ciruela_roja","coco_cafe","pitahaya","cereza","higo","elote_blanco","elote_blanco_duo","elote_blanco_3","elote_blanco_4","elote_blanco_5"];
+var MERCADO = ["limon_persa","tuna","maracuya","rambutan","ciruela_roja","coco_cafe","pitahaya","cereza","higo","elote_blanco"];
+// Paquetes de Elote Blanco (Duo/3/4/5-Pack): solo precio normal, igual que Ludo
+// Duo/Elotiza/Parrillada/Fiesta no entran a precio familiar (solo el suelto/Select sí).
+var ELOTE_BLANCO_PAQUETES = ["elote_blanco_duo","elote_blanco_3","elote_blanco_4","elote_blanco_5"];
 
 function getCatalogoDisponible() {
   if (precioFamiliar) {
     var IDS = ["zarzamora","frambuesa","blueberry","fresa","cherry_rojo","cherry_amarillo","tomate_kumato","elote_antojo"].concat(MERCADO);
     return CATALOGO.filter(function(c){ return IDS.indexOf(c.id) !== -1; });
   }
-  var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","ludo_berry_max","fresa","fresa_2","fresa_3","cherry_rojo","cherry_amarillo","tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"].concat(MERCADO);
+  var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","ludo_berry_max","fresa","fresa_2","fresa_3","cherry_rojo","cherry_amarillo","tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"].concat(MERCADO).concat(ELOTE_BLANCO_PAQUETES);
   return CATALOGO.filter(function(c){ return ACTIVOS.indexOf(c.id) !== -1; });
 }
 

@@ -197,6 +197,7 @@ var proveedorData = [];
 var kpiData = [];
 var expandido = null;
 var periodoAgrupacion = "semana"; // "semana" | "mes" — para la gráfica de Tablero
+var casasExpandido = false; // ver top 5 vs. lista completa en "VENTAS POR CASA"
 
 document.getElementById("tabTablero").addEventListener("click",  function(){ switchTab("tablero"); });
 document.getElementById("tabResumen").addEventListener("click",  function(){ switchTab("resumen"); });
@@ -258,6 +259,22 @@ async function cargarTablero() {
   } catch(e) {
     document.getElementById("kpiContent").innerHTML="<p style='color:#ff8a80;text-align:center;padding:20px'>"+e.message+"</p>";
   }
+}
+
+/**
+ * Ventas totales agrupadas por dirección de entrega (columna "Dirección" en
+ * Sheets), de mayor a menor. Los pedidos sin dirección capturada se agrupan
+ * bajo "Sin dirección" — no se descartan silenciosamente, pero conviene saber
+ * que hoy la mayoría de los pedidos viejos de Azaleas no tienen ese campo
+ * lleno (el número de casa históricamente vivía en el nombre del cliente).
+ */
+function calcularVentasPorCasa(datos) {
+  var porCasa = {};
+  datos.forEach(function(r){
+    var casa = (r[11] || "").trim() || "Sin dirección";
+    porCasa[casa] = (porCasa[casa] || 0) + (parseFloat(r[4]) || 0);
+  });
+  return Object.entries(porCasa).sort(function(a,b){ return b[1]-a[1]; });
 }
 
 /**
@@ -553,6 +570,26 @@ function renderTablero() {
     html += '</div>';
   }
 
+  // ── Ventas por casa (dirección de entrega) — top 5 con opción de desplegar ──
+  var casas = calcularVentasPorCasa(datos);
+  if (casas.length) {
+    var maxCasa = Math.max.apply(null, casas.map(function(c){ return c[1]; }));
+    var casasAMostrar = casasExpandido ? casas : casas.slice(0, 5);
+    html += '<div class="kpi-block"><div class="kpi-block-title" style="display:flex;justify-content:space-between;align-items:center">'+
+      '<span>VENTAS POR CASA</span>'+
+      (casas.length > 5 ? '<button class="periodo-btn" id="toggleCasas">'+(casasExpandido ? 'Ver menos' : 'Ver todas ('+casas.length+')')+'</button>' : '')+
+    '</div>';
+    casasAMostrar.forEach(function(c){
+      var pct = maxCasa>0 ? Math.round(c[1]/maxCasa*100) : 0;
+      html += '<div class="cliente-bar-row">'+
+        '<span class="cliente-bar-name">'+c[0]+'</span>'+
+        '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%"></div></div>'+
+        '<span class="cliente-bar-grams">$'+c[1].toFixed(0)+'</span>'+
+      '</div>';
+    });
+    html += '</div>';
+  }
+
   // ── Detalle de ventas por producto (fruta · nombre comercial · presentación) ──
   var tabla = calcularTablaVentas(datos);
   if (tabla.length) {
@@ -618,10 +655,16 @@ function renderTablero() {
 
   container.innerHTML = html;
   container.querySelectorAll(".periodo-btn").forEach(function(btn){
+    if (!btn.dataset.periodo) return; // el botón "Ver todas/Ver menos" de casas reusa esta clase solo por estilo
     btn.addEventListener("click", function(){
       periodoAgrupacion = this.dataset.periodo;
       renderTablero();
     });
+  });
+  var toggleCasasBtn = document.getElementById("toggleCasas");
+  if (toggleCasasBtn) toggleCasasBtn.addEventListener("click", function(){
+    casasExpandido = !casasExpandido;
+    renderTablero();
   });
 }
 

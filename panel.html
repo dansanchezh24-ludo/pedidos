@@ -274,8 +274,8 @@ async function cargarTablero() {
 function calcularVentasPorCasa(datos) {
   var porUbicCasa = {};
   datos.forEach(function(r){
-    var ubic = (r[10] || "").trim() || "Sin ubicación";
-    var casa = (r[11] || "").trim() || "Sin dirección";
+    var ubic = String(r[10] || "").trim() || "Sin ubicación";
+    var casa = String(r[11] || "").trim() || "Sin dirección";
     if (!porUbicCasa[ubic]) porUbicCasa[ubic] = {};
     porUbicCasa[ubic][casa] = (porUbicCasa[ubic][casa] || 0) + (parseFloat(r[4]) || 0);
   });

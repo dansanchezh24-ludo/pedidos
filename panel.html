@@ -198,6 +198,8 @@ var kpiData = [];
 var expandido = null;
 var periodoAgrupacion = "semana"; // "semana" | "mes" — para la gráfica de Tablero
 var casasExpandido = {}; // { ubicacion: true|false } — ver top 5 vs. lista completa por ubicación en "VENTAS POR CASA"
+var frutaExpandida = {}; // { fruta: true|false } — expandir/colapsar detalle de productos en "DETALLE DE VENTAS POR PRODUCTO"
+var ordenDetalleVentas = "alfabetico"; // "alfabetico" | "ventaDesc" | "ventaAsc" | "utilidadDesc" | "utilidadAsc"
 
 document.getElementById("tabTablero").addEventListener("click",  function(){ switchTab("tablero"); });
 document.getElementById("tabResumen").addEventListener("click",  function(){ switchTab("resumen"); });
@@ -334,6 +336,34 @@ function calcularKPIsGlobal(datos) {
     numFechas: Object.keys(porFecha).length,
     porUbicacion: porUbicacion
   };
+}
+
+/**
+ * Costo real pagado al proveedor por "fruta" — mismo agrupador que usa
+ * calcularTablaVentas/filasVenta — sumado sobre todas las fechas del rango.
+ * Se agrupa primero por fecha exacta de entrega, igual que calcularKPIsGlobal,
+ * porque el redondeo a botes/paquetes se hace por fecha, no de forma global.
+ * Los productos de "otros" (sin categoría reconocida) se juntan todos bajo
+ * "(sin categoría)", igual que hace filasVenta.
+ */
+function calcularCostoPorFruta(datos) {
+  var porFecha = {};
+  datos.forEach(function(r){
+    var f = fmtFecha(r[6]);
+    if (!porFecha[f]) porFecha[f] = [];
+    porFecha[f].push(r);
+  });
+  var costoPorFruta = {};
+  function suma(fruta, costo) { costoPorFruta[fruta] = (costoPorFruta[fruta] || 0) + costo; }
+  Object.keys(porFecha).forEach(function(f){
+    var c = calcularCompraProveedor(porFecha[f], f);
+    Object.keys(c.berries).forEach(function(fn){ suma(fn, c.berries[fn].costoProveedor); });
+    Object.keys(c.elotes).forEach(function(en){ suma(ELOTE_FRUTA[en] || en, c.elotes[en].costoTotal); });
+    Object.keys(c.piezas).forEach(function(pn){ suma(pn, c.piezas[pn].costoTotal); });
+    Object.keys(c.mercadoKg).forEach(function(mn){ suma(mn, c.mercadoKg[mn].costoTotal); });
+    Object.keys(c.otros).forEach(function(pn){ suma("(sin categoría)", c.otros[pn].costoTotal); });
+  });
+  return costoPorFruta;
 }
 
 /**
@@ -608,35 +638,93 @@ function renderTablero() {
   });
 
   // ── Detalle de ventas por producto (fruta · nombre comercial · presentación) ──
+  // Agrupado por fruta (colapsado por default); costo/utilidad de cada fruta
+  // salen de calcularCostoPorFruta (pago real al proveedor, no aproximado) y
+  // se prorratean a las filas de producto dentro del grupo según su parte del
+  // importe — el subtotal por fruta sí es exacto, el desglose por producto es
+  // una repartición proporcional de ese mismo total.
   var tabla = calcularTablaVentas(datos);
   if (tabla.length) {
-    var totalImporte = tabla.reduce(function(s,f){ return s+f.importe; },0);
-    html += '<div class="kpi-block"><div class="kpi-block-title">DETALLE DE VENTAS POR PRODUCTO</div>';
-    html += '<table class="cliente-table"><thead><tr>'+
-      '<th>FRUTA</th><th>NOMBRE COMERCIAL</th><th>PRESENTACIÓN</th><th style="text-align:right">CANT.</th><th>IMPORTE</th>'+
+    var costoPorFruta = calcularCostoPorFruta(datos);
+    var gruposPorFruta = {};
+    tabla.forEach(function(f){
+      if (!gruposPorFruta[f.fruta]) gruposPorFruta[f.fruta] = { fruta:f.fruta, rows:[], importe:0 };
+      gruposPorFruta[f.fruta].rows.push(f);
+      gruposPorFruta[f.fruta].importe += f.importe;
+    });
+    var grupos = Object.keys(gruposPorFruta).map(function(fr){
+      var g = gruposPorFruta[fr];
+      g.costo = costoPorFruta[fr] || 0;
+      g.utilidad = g.importe - g.costo;
+      return g;
+    });
+    grupos.forEach(function(g){
+      g.rows.sort(function(a,b){ return a.nombreComercial.localeCompare(b.nombreComercial); });
+    });
+
+    var totalImporte = grupos.reduce(function(s,g){ return s+g.importe; },0);
+    var totalCosto = grupos.reduce(function(s,g){ return s+g.costo; },0);
+    var totalUtilidad = totalImporte - totalCosto;
+
+    var comparadoresDetalle = {
+      alfabetico:   function(a,b){ return a.fruta.localeCompare(b.fruta); },
+      ventaDesc:    function(a,b){ return b.importe - a.importe; },
+      ventaAsc:     function(a,b){ return a.importe - b.importe; },
+      utilidadDesc: function(a,b){ return b.utilidad - a.utilidad; },
+      utilidadAsc:  function(a,b){ return a.utilidad - b.utilidad; }
+    };
+    grupos.sort(comparadoresDetalle[ordenDetalleVentas] || comparadoresDetalle.alfabetico);
+
+    html += '<div class="kpi-block"><div class="kpi-block-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+      '<span>DETALLE DE VENTAS POR PRODUCTO</span>'+
+      '<select id="ordenDetalleSelect" style="background:rgba(0,0,0,0.3);border:1px solid rgba(168,230,163,0.25);border-radius:8px;color:#a8e6a3;font-size:11px;padding:5px 8px;font-family:Georgia,serif">'+
+        '<option value="alfabetico"'+(ordenDetalleVentas==="alfabetico"?" selected":"")+'>A-Z</option>'+
+        '<option value="ventaDesc"'+(ordenDetalleVentas==="ventaDesc"?" selected":"")+'>Venta: mayor a menor</option>'+
+        '<option value="ventaAsc"'+(ordenDetalleVentas==="ventaAsc"?" selected":"")+'>Venta: menor a mayor</option>'+
+        '<option value="utilidadDesc"'+(ordenDetalleVentas==="utilidadDesc"?" selected":"")+'>Utilidad: mayor a menor</option>'+
+        '<option value="utilidadAsc"'+(ordenDetalleVentas==="utilidadAsc"?" selected":"")+'>Utilidad: menor a mayor</option>'+
+      '</select>'+
+    '</div>';
+    html += '<div style="overflow-x:auto"><table class="cliente-table" style="white-space:nowrap"><thead><tr>'+
+      '<th>FRUTA</th><th>NOMBRE COMERCIAL</th><th>PRESENTACIÓN</th>'+
+      '<th style="text-align:right">CANT.</th><th style="text-align:right">IMPORTE</th>'+
+      '<th style="text-align:right">COSTO</th><th style="text-align:right">UTILIDAD</th>'+
     '</tr></thead><tbody>';
-    tabla.forEach(function(f, i){
-      html += '<tr class="cliente-row" style="cursor:default">'+
-        '<td>'+f.fruta+'</td>'+
-        '<td>'+f.nombreComercial+'</td>'+
-        '<td style="color:#6b9e6b">'+f.presentacion+'</td>'+
-        '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
-        '<td>$'+f.importe.toFixed(0)+'</td>'+
+
+    grupos.forEach(function(g){
+      var abierto = !!frutaExpandida[g.fruta];
+      var utilStyle = g.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
+      html += '<tr class="cliente-row fruta-group-row" data-fruta="'+g.fruta.replace(/"/g,"&quot;")+'">'+
+        '<td colspan="3" style="font-weight:bold;color:#e8f5e8">'+(abierto?"▲":"▼")+' '+g.fruta+' <span class="cliente-sub">'+g.rows.length+' producto'+(g.rows.length!==1?"s":"")+'</span></td>'+
+        '<td style="text-align:right;color:#6b9e6b">—</td>'+
+        '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+g.importe.toFixed(0)+'</td>'+
+        '<td style="text-align:right;color:#ffb74d">$'+g.costo.toFixed(0)+'</td>'+
+        '<td style="text-align:right;font-weight:bold;'+utilStyle+'">$'+g.utilidad.toFixed(0)+'</td>'+
       '</tr>';
-      var esFinDeGrupo = (i === tabla.length-1) || (tabla[i+1].fruta !== f.fruta);
-      if (esFinDeGrupo) {
-        var grupo = tabla.filter(function(x){ return x.fruta === f.fruta; });
-        var subCant = grupo.reduce(function(s,x){ return s+x.cantidad; },0);
-        var subImp  = grupo.reduce(function(s,x){ return s+x.importe; },0);
-        html += '<tr class="detail-row" style="background:rgba(76,175,80,0.08)">'+
-          '<td colspan="3" style="font-weight:bold;color:#a8e6a3">Subtotal '+f.fruta+'</td>'+
-          '<td style="text-align:right;font-weight:bold;color:#a8e6a3">'+(Math.round(subCant*100)/100)+'</td>'+
-          '<td style="font-weight:bold;color:#a8e6a3">$'+subImp.toFixed(0)+'</td>'+
-        '</tr>';
+      if (abierto) {
+        g.rows.forEach(function(f){
+          var costoFila = g.importe > 0 ? (f.importe / g.importe) * g.costo : 0;
+          var utilFila = f.importe - costoFila;
+          html += '<tr class="detail-row">'+
+            '<td></td>'+
+            '<td>'+f.nombreComercial+'</td>'+
+            '<td style="color:#6b9e6b">'+f.presentacion+'</td>'+
+            '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
+            '<td style="text-align:right">$'+f.importe.toFixed(0)+'</td>'+
+            '<td style="text-align:right;color:#ffb74d">$'+costoFila.toFixed(0)+'</td>'+
+            '<td style="text-align:right">$'+utilFila.toFixed(0)+'</td>'+
+          '</tr>';
+        });
       }
     });
-    html += '<tr class="total-row"><td colspan="4">TOTAL</td><td>$'+totalImporte.toFixed(0)+'</td></tr>';
-    html += '</tbody></table></div>';
+
+    html += '<tr class="total-row">'+
+      '<td colspan="4">TOTAL</td>'+
+      '<td style="text-align:right">$'+totalImporte.toFixed(0)+'</td>'+
+      '<td style="text-align:right">$'+totalCosto.toFixed(0)+'</td>'+
+      '<td style="text-align:right">$'+totalUtilidad.toFixed(0)+'</td>'+
+    '</tr>';
+    html += '</tbody></table></div></div>';
   }
 
   // ── Ventas por mes y fruta (tabla gráfica tipo mapa de calor) ──
@@ -682,6 +770,20 @@ function renderTablero() {
     btn.addEventListener("click", function(){
       var ubic = this.dataset.ubic;
       casasExpandido[ubic] = !casasExpandido[ubic];
+      renderTablero();
+    });
+  });
+  var ordenSelect = container.querySelector("#ordenDetalleSelect");
+  if (ordenSelect) {
+    ordenSelect.addEventListener("change", function(){
+      ordenDetalleVentas = this.value;
+      renderTablero();
+    });
+  }
+  container.querySelectorAll(".fruta-group-row").forEach(function(row){
+    row.addEventListener("click", function(){
+      var fruta = this.dataset.fruta;
+      frutaExpandida[fruta] = !frutaExpandida[fruta];
       renderTablero();
     });
   });

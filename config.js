@@ -71,7 +71,6 @@ var HIST_COSTO_PROVEEDOR = {
   // Aliases para compatibilidad con pedidos históricos en Sheets
   "Blueberry chica bote": [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
   "Blueberry grande":     [ {desde:"2000-01-01", costo:50}, {desde:"2026-06-08", costo:80} ],
-  "Fresa":                [ {desde:"2026-06-29", costo:50}, {desde:"2026-07-08", costo:60} ],
   "Cereza":               [ {desde:"2026-06-30", costo:70} ],
 };
 // Se compran por clamshell individual, sin conversión a botes de 3 — cada clamshell
@@ -79,6 +78,7 @@ var HIST_COSTO_PROVEEDOR = {
 // (que empaquetan 3 clamshells de cherry cada uno).
 var HIST_COSTO_PROVEEDOR_CLAMSHELL = {
   "Higo":                 [ {desde:"2026-06-30", costo:60} ],
+  "Fresa":                [ {desde:"2026-06-29", costo:50}, {desde:"2026-07-08", costo:60} ],
   "Cherry rojo":          [ {desde:"2026-06-29", costo:20}, {desde:"2026-07-08", costo:30} ],
   "Cherry amarillo":      [ {desde:"2026-06-29", costo:20}, {desde:"2026-07-08", costo:30} ],
   // "Tomate cherry kumato" es el nombre viejo del mismo producto — se deja congelado

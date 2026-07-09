@@ -235,10 +235,10 @@ function actualizarClientesList() {
       if (c.direccion.indexOf(direccionVal) !== -1) coincidenSet[c.nombre] = true;
     });
     var coinciden = Object.keys(coincidenSet).sort();
-    if (coinciden.length) {
-      var resto = todosLosClientes.filter(function(n){ return !coincidenSet[n]; });
-      lista = coinciden.concat(resto); // los de esta dirección primero
-    }
+    // Si la dirección ya tiene clientes vinculados, mostrar SOLO esos (filtro
+    // estricto). Si es una dirección nueva sin coincidencias, mostrar la lista
+    // completa como respaldo para no dejar el campo sin sugerencias.
+    if (coinciden.length) lista = coinciden;
   }
   var datalist = document.getElementById("clientesList");
   datalist.innerHTML = lista.map(function(n){ return '<option value="'+n.replace(/"/g,"&quot;")+'">'; }).join("");

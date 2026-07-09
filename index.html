@@ -365,7 +365,10 @@ async function guardar() {
   // no se registre como entradas distintas por diferencias de espaciado.
   var cliente   = document.getElementById("cliente").value.trim().replace(/\s+/g," ");
   var fecha     = document.getElementById("fecha").value;
-  var horaEntrega = document.getElementById("horaEntrega").value;
+  // Prefijo "~" para que Sheets NO la auto-detecte como valor de hora (si detecta
+  // "14:30" como hora, la convierte a su serial interno y se vuelve ilegible al leerla).
+  var horaEntregaRaw = document.getElementById("horaEntrega").value;
+  var horaEntrega = horaEntregaRaw ? "~"+horaEntregaRaw : "";
   var direccion = document.getElementById("direccion").value.trim();
   var errEl   = document.getElementById("error");
   var btn     = document.getElementById("saveBtn");

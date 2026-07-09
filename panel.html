@@ -751,8 +751,8 @@ function renderResumen() {
     var direccionTag=info.direccion?'<div class="cliente-sub">🏠 '+info.direccion+'</div>':'';
     var horaTag=info.horaEntrega?'<span style="font-size:11px;color:#5a8a5a"> · 🕐 '+info.horaEntrega+'</span>':'';
     var pagadoTag=info.pagado
-      ? '<span class="pagado-pill pagado-si">✅ Pagado</span>'
-      : '<span class="pagado-pill pagado-no">⏳ Pendiente</span>';
+      ? '<span class="pagado-pill pagado-si" data-cliente="'+nombre.replace(/"/g,"&quot;")+'" data-estado="pagado">✅ Pagado</span>'
+      : '<span class="pagado-pill pagado-no" data-cliente="'+nombre.replace(/"/g,"&quot;")+'" data-estado="pendiente">⏳ Pendiente</span>';
     tr.innerHTML=
       '<td><div class="cliente-name">'+nombre+ubiTag+horaTag+'</div>'+direccionTag+'<div class="cliente-sub">'+info.items.length+' producto'+(info.items.length!==1?"s":"")+'</div></td>'+
       '<td style="color:#6b9e6b;font-size:13px">'+(isOpen?"▲":"▼")+'</td>'+
@@ -772,6 +772,30 @@ function renderResumen() {
   tbody.appendChild(ttr);
   table.appendChild(tbody);
   container.appendChild(table);
+  container.querySelectorAll(".pagado-pill").forEach(function(el){
+    el.addEventListener("click", function(ev){
+      ev.stopPropagation(); // no togglear la fila (expandir/colapsar) al tocar el badge
+      var cliente = this.dataset.cliente;
+      var nuevoEstado = this.dataset.estado === "pagado" ? "pendiente" : "pagado";
+      togglePagado(cliente, filtro, nuevoEstado);
+    });
+  });
+}
+
+/**
+ * Marca como Pagado/Pendiente (columna F en Sheets) todas las filas de un
+ * cliente en una fecha de entrega. Actualiza la vista local de inmediato
+ * (optimista) y manda el cambio al Apps Script en segundo plano — mismo
+ * patrón fire-and-forget que usa index.html al guardar un pedido nuevo,
+ * porque el fetch va con mode:"no-cors" y no se puede leer la respuesta.
+ */
+function togglePagado(cliente, fecha, nuevoEstado) {
+  var nuevoTexto = nuevoEstado === "pagado" ? "Pagado" : "Pendiente";
+  resumenData.forEach(function(r){
+    if ((r[2]||"").trim() === cliente && fmtFecha(r[6]) === fecha) r[5] = nuevoTexto;
+  });
+  renderResumen();
+  fetch(SCRIPT_URL+"?action=marcarPagado&cliente="+encodeURIComponent(cliente)+"&fecha="+encodeURIComponent(fecha)+"&estado="+nuevoEstado, {mode:"no-cors"});
 }
 
 // ═══════════════════════════════════════════

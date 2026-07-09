@@ -53,6 +53,13 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 .kpi-mini-val { font-size:16px; font-weight:bold; color:#e8f5e8; }
 .kpi-block { background:rgba(255,255,255,0.03); border:1px solid rgba(168,230,163,0.12); border-radius:14px; padding:14px 18px; }
 .kpi-block-title { font-size:9px; color:#6b9e6b; letter-spacing:1.5px; margin-bottom:10px; }
+/* Gráfica ventas/costo/utilidad por periodo */
+.periodo-toggle { display:flex; gap:4px; }
+.periodo-btn { background:rgba(255,255,255,0.05); border:1px solid rgba(168,230,163,0.2); border-radius:8px; color:#6b9e6b; font-size:10px; letter-spacing:0.5px; padding:5px 10px; cursor:pointer; font-family:Georgia,serif; }
+.periodo-btn.active { background:rgba(76,175,80,0.25); border-color:rgba(168,230,163,0.5); color:#a8e6a3; font-weight:bold; }
+.grafica-leyenda { display:flex; gap:16px; margin-bottom:10px; }
+.leyenda-item { display:flex; align-items:center; gap:5px; font-size:11px; color:#9db8a0; }
+.leyenda-swatch { width:9px; height:9px; border-radius:2px; display:inline-block; }
 
 /* ── PROVEEDOR TAB ── */
 .prov-summary { background:linear-gradient(135deg,rgba(76,175,80,0.18),rgba(46,125,50,0.08)); border:1px solid rgba(168,230,163,0.25); border-radius:16px; padding:20px 22px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; text-align:center; }
@@ -185,6 +192,7 @@ var resumenData = [];
 var proveedorData = [];
 var kpiData = [];
 var expandido = null;
+var periodoAgrupacion = "semana"; // "semana" | "mes" — para la gráfica de Tablero
 
 document.getElementById("tabTablero").addEventListener("click",  function(){ switchTab("tablero"); });
 document.getElementById("tabResumen").addEventListener("click",  function(){ switchTab("resumen"); });
@@ -421,6 +429,55 @@ function calcularVentasPorMes(datos) {
   return { frutas:frutas, meses:meses, datos:datosMatriz, totalesFruta:totalesFruta };
 }
 
+// Devuelve la fecha (YYYY-MM-DD) del lunes de la semana que contiene `fecha`.
+function claveSemana(fecha) {
+  var d = new Date(fecha + "T00:00:00");
+  var dow = d.getDay(); // 0=domingo .. 6=sábado
+  var diffALunes = (dow === 0) ? -6 : (1 - dow);
+  d.setDate(d.getDate() + diffALunes);
+  var y = d.getFullYear();
+  var m = String(d.getMonth() + 1).padStart(2, "0");
+  var day = String(d.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + day;
+}
+
+function fmtPeriodoLabel(key, agrupacion) {
+  var meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  var partes = key.split("-");
+  if (agrupacion === "mes") return meses[parseInt(partes[1],10)-1] + " " + partes[0].slice(2);
+  return partes[2] + " " + meses[parseInt(partes[1],10)-1]; // semana: día del lunes + mes
+}
+
+/**
+ * Venta, costo a proveedor y utilidad agrupados por semana o por mes.
+ * El costo se calcula agrupando primero por fecha exacta de entrega (igual que
+ * calcularKPIsGlobal) para que el redondeo a botes refleje lo que realmente se
+ * pagó cada día, y luego se suman esos totales diarios dentro de cada periodo
+ * — no se recalculan cajas pooled a nivel semana/mes, porque el proveedor se
+ * compra por fecha de entrega, no por semana.
+ */
+function calcularVentasPorPeriodo(datos, agrupacion) {
+  var porFecha = {};
+  datos.forEach(function(r) {
+    var f = fmtFecha(r[6]);
+    if (f === "Sin fecha") return;
+    if (!porFecha[f]) porFecha[f] = [];
+    porFecha[f].push(r);
+  });
+  var porPeriodo = {};
+  Object.keys(porFecha).forEach(function(f) {
+    var c = calcularCompraProveedor(porFecha[f], f);
+    var key = agrupacion === "mes" ? f.slice(0, 7) : claveSemana(f);
+    if (!porPeriodo[key]) porPeriodo[key] = { venta: 0, costo: 0 };
+    porPeriodo[key].venta += c.ventaTotal;
+    porPeriodo[key].costo += c.costoTotalProveedor;
+  });
+  return Object.keys(porPeriodo).sort().map(function(k) {
+    var p = porPeriodo[k];
+    return { key: k, label: fmtPeriodoLabel(k, agrupacion), venta: p.venta, costo: p.costo, utilidad: p.venta - p.costo };
+  });
+}
+
 function kpiCard(label, val, cls) {
   return '<div class="kpi-card"><div class="kpi-label">'+label+'</div><div class="kpi-val '+(cls||'')+'">'+val+'</div></div>';
 }
@@ -474,6 +531,8 @@ function renderTablero() {
   html += kpiMini("CLIENTES", k.numClientes);
   html += kpiMini("DÍAS C/ENTREGA", k.numFechas);
   html += '</div>';
+
+  html += renderGraficaVentas(datos);
 
   var ubis = Object.entries(k.porUbicacion).sort(function(a,b){ return b[1]-a[1]; });
   if (ubis.length) {
@@ -554,12 +613,81 @@ function renderTablero() {
   }
 
   container.innerHTML = html;
+  container.querySelectorAll(".periodo-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      periodoAgrupacion = this.dataset.periodo;
+      renderTablero();
+    });
+  });
 }
 
 function fmtMesLabel(m) {
   var partes = m.split("-");
   var meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
   return meses[parseInt(partes[1],10)-1] + " " + partes[0].slice(2);
+}
+
+/**
+ * Gráfica de barras: por cada semana/mes, el costo a proveedor (naranja) y la
+ * utilidad (verde) apilados — la altura total de la barra es la venta, así
+ * se ve de un vistazo cuánto de lo vendido fue costo y cuánto fue ganancia.
+ * Si un periodo dio pérdida (utilidad<0), la venta no alcanza a cubrir el
+ * costo: la barra muestra el costo completo en naranja con un remate rojo
+ * arriba marcando la parte del costo que no se recuperó con ventas.
+ */
+function renderGraficaVentas(datos) {
+  var periodos = calcularVentasPorPeriodo(datos, periodoAgrupacion);
+  if (!periodos.length) return "";
+
+  var chartH = 150, barW = 26, gap = 16, padTop = 26, padBottom = 30, padSide = 10;
+  var maxVal = Math.max.apply(null, periodos.map(function(p){ return Math.max(p.costo, p.venta); }));
+  if (maxVal <= 0) maxVal = 1;
+  var svgW = padSide * 2 + periodos.length * (barW + gap) - gap;
+  var svgH = padTop + chartH + padBottom;
+  var mostrarLabels = periodos.length <= 12;
+  var baseY = padTop + chartH;
+
+  var bars = periodos.map(function(p, i) {
+    var x = padSide + i * (barW + gap);
+    var costoH = (p.costo / maxVal) * chartH;
+    var ventaH = (p.venta / maxVal) * chartH;
+    var esPerdida = p.utilidad < 0;
+    var rects = '<rect x="'+x+'" y="'+(baseY-costoH)+'" width="'+barW+'" height="'+costoH+'" fill="#ffb74d"/>';
+    if (!esPerdida) {
+      var utilH = ventaH - costoH;
+      if (utilH > 0.5) rects += '<rect x="'+x+'" y="'+(baseY-ventaH)+'" width="'+barW+'" height="'+utilH+'" fill="#a8e6a3"/>';
+    } else {
+      var capH = costoH - ventaH;
+      if (capH > 0.5) rects += '<rect x="'+x+'" y="'+(baseY-costoH)+'" width="'+barW+'" height="'+capH+'" fill="#ff7070"/>';
+    }
+    var topY = baseY - Math.max(costoH, ventaH);
+    var label = mostrarLabels
+      ? '<text x="'+(x+barW/2)+'" y="'+(topY-6)+'" text-anchor="middle" font-size="10" font-weight="bold" fill="'+(esPerdida?'#ff7070':'#a8e6a3')+'">'+(p.utilidad>=0?'+':'−')+'$'+Math.round(Math.abs(p.utilidad))+'</text>'
+      : '';
+    var xLabel = '<text x="'+(x+barW/2)+'" y="'+(baseY+16)+'" text-anchor="middle" font-size="10" fill="#6b9e6b">'+p.label+'</text>';
+    var titulo = '<title>'+p.label+' — Venta $'+p.venta.toFixed(0)+' · Costo $'+p.costo.toFixed(0)+' · Utilidad $'+p.utilidad.toFixed(0)+'</title>';
+    return '<g>'+titulo+rects+label+xLabel+'</g>';
+  }).join("");
+
+  var baseline = '<line x1="0" y1="'+baseY+'" x2="'+svgW+'" y2="'+baseY+'" stroke="rgba(168,230,163,0.2)" stroke-width="1"/>';
+
+  return '<div class="kpi-block">'+
+    '<div class="kpi-block-title" style="display:flex;justify-content:space-between;align-items:center">'+
+      '<span>VENTAS Y UTILIDAD POR PERIODO</span>'+
+      '<div class="periodo-toggle">'+
+        '<button class="periodo-btn'+(periodoAgrupacion==="semana"?" active":"")+'" data-periodo="semana">Semana</button>'+
+        '<button class="periodo-btn'+(periodoAgrupacion==="mes"?" active":"")+'" data-periodo="mes">Mes</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="grafica-leyenda">'+
+      '<span class="leyenda-item"><span class="leyenda-swatch" style="background:#ffb74d"></span>Costo</span>'+
+      '<span class="leyenda-item"><span class="leyenda-swatch" style="background:#a8e6a3"></span>Utilidad</span>'+
+      '<span class="leyenda-item"><span class="leyenda-swatch" style="background:#ff7070"></span>Pérdida (costo no cubierto)</span>'+
+    '</div>'+
+    '<div style="overflow-x:auto">'+
+      '<svg width="'+svgW+'" height="'+svgH+'" viewBox="0 0 '+svgW+' '+svgH+'" style="display:block">'+baseline+bars+'</svg>'+
+    '</div>'+
+  '</div>';
 }
 
 // ═══════════════════════════════════════════

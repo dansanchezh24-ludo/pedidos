@@ -58,6 +58,10 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 <div class="content">
   <!-- ══ CAPTURA ══ -->
   <div id="captura" class="view active">
+    <div id="direccionWrap">
+      <label>DIRECCIÓN DE ENTREGA (CASA/LOTE)</label>
+      <input id="direccion" type="text" placeholder="Ej. C11, H10..." autocomplete="off">
+    </div>
     <div>
       <label>NOMBRE DEL CLIENTE</label>
       <input id="cliente" type="text" placeholder="Ej. Melys, Adriana..." list="clientesList" autocomplete="off">
@@ -78,10 +82,6 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
         <button class="ubi-btn" id="ubiSereno">🌿 El Sereno</button>
         <button class="ubi-btn" id="ubiGeneral">📍 General</button>
       </div>
-    </div>
-    <div id="direccionWrap">
-      <label>DIRECCIÓN DE ENTREGA</label>
-      <input id="direccion" type="text" placeholder="Calle, número, colonia...">
     </div>
     <div>
       <label>TIPO DE PRECIO</label>
@@ -198,23 +198,52 @@ function setUbi(u) {
 // Trae los nombres de clientes ya usados en pedidos anteriores para sugerirlos
 // mientras se escribe, y así el equipo reuse el mismo nombre exacto en vez de
 // escribir variantes ("Martha G3" / "Martha Pinedo" / "Pinedo G3" para la misma persona).
+// También recuerda qué dirección usó cada cliente: si dos personas distintas viven
+// en la misma casa (ej. "Ama C11", "Sofi C11", "Montse C11"), escribir la dirección
+// primero muestra arriba los nombres ya vinculados a esa dirección, para reconocer
+// de un vistazo si es alguien ya conocido de esa casa o alguien nuevo.
+var todosLosClientes = [];      // todos los nombres distintos, alfabético
+var clienteDireccionPares = []; // [{nombre, direccion (lowercase)}] — solo filas con dirección
+
 async function cargarClientesConocidos() {
   try {
     var res = await fetch(SCRIPT_URL+"?action=read");
     var data = await res.json();
     var rows = (data.rows||[]).slice(1).filter(function(r){ return r[0]&&r[2]; });
     var nombresSet = {};
+    clienteDireccionPares = [];
     rows.forEach(function(r){
       var n = (r[2]||"").trim().replace(/\s+/g," ");
-      if (n) nombresSet[n] = true;
+      var d = (r[11]||"").trim();
+      if (!n) return;
+      nombresSet[n] = true;
+      if (d) clienteDireccionPares.push({ nombre:n, direccion:d.toLowerCase() });
     });
-    var nombres = Object.keys(nombresSet).sort();
-    var datalist = document.getElementById("clientesList");
-    datalist.innerHTML = nombres.map(function(n){ return '<option value="'+n.replace(/"/g,"&quot;")+'">'; }).join("");
+    todosLosClientes = Object.keys(nombresSet).sort();
+    actualizarClientesList();
   } catch (e) {
     // Sin conexión o error de red: la captura sigue funcionando con texto libre, solo sin sugerencias.
   }
 }
+
+function actualizarClientesList() {
+  var direccionVal = document.getElementById("direccion").value.trim().toLowerCase();
+  var lista = todosLosClientes;
+  if (direccionVal) {
+    var coincidenSet = {};
+    clienteDireccionPares.forEach(function(c){
+      if (c.direccion.indexOf(direccionVal) !== -1) coincidenSet[c.nombre] = true;
+    });
+    var coinciden = Object.keys(coincidenSet).sort();
+    if (coinciden.length) {
+      var resto = todosLosClientes.filter(function(n){ return !coincidenSet[n]; });
+      lista = coinciden.concat(resto); // los de esta dirección primero
+    }
+  }
+  var datalist = document.getElementById("clientesList");
+  datalist.innerHTML = lista.map(function(n){ return '<option value="'+n.replace(/"/g,"&quot;")+'">'; }).join("");
+}
+document.getElementById("direccion").addEventListener("input", actualizarClientesList);
 cargarClientesConocidos();
 
 document.getElementById("addBtn").addEventListener("click", function(){

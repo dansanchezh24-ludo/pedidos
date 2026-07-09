@@ -199,6 +199,7 @@ var expandido = null;
 var periodoAgrupacion = "semana"; // "semana" | "mes" — para la gráfica de Tablero
 var casasExpandido = {}; // { ubicacion: true|false } — ver top 5 vs. lista completa por ubicación en "VENTAS POR CASA"
 var frutaExpandida = {}; // { fruta: true|false } — expandir/colapsar detalle de productos en "DETALLE DE VENTAS POR PRODUCTO"
+var productoExpandido = {}; // { "nombreComercial||presentacion": true|false } — expandir/colapsar desglose por fruta en la vista "Por producto"
 var ordenDetalleVentas = "alfabetico"; // "alfabetico" | "ventaDesc" | "ventaAsc" | "utilidadDesc" | "utilidadAsc"
 var vistaDetalleVentas = "fruta"; // "fruta" | "producto" — agrupar "DETALLE DE VENTAS POR PRODUCTO" por fruta o por nombre comercial
 
@@ -702,36 +703,33 @@ function renderTablero() {
       utilidadAsc:  function(a,b){ return a.utilidad - b.utilidad; }
     };
 
-    // ── Vista "por producto" — un renglón por nombre comercial, sin repetirlo
-    // una vez por cada fruta que lleva (ver explicación de Ludo Mix: la cantidad
-    // NO se suma entre frutas porque es el mismo pedido contado varias veces;
-    // el costo SÍ suma la parte de cada fruta, porque cada una es un insumo real
-    // aparte (ej. Ludo Mix realmente consume 1 clamshell de cada una de las 3). ──
+    // ── Vista "por producto" — agrupa las mismas filas de `tabla` por nombre
+    // comercial en vez de por fruta. Cuando un producto lleva más de una fruta
+    // (Ludo Mix/Select/Pack, Familiar 2x/3x, Cherry Mix...) el grupo se puede
+    // expandir para ver el desglose por fruta — cada una con su costo real,
+    // igual que en la vista "Por fruta". El orden (venta/utilidad mayor a
+    // menor) se aplica al grupo/encabezado, no a las filas de fruta de adentro
+    // (esas siempre quedan alfabéticas), porque ordenar cada fruta suelta no
+    // dice nada útil sobre qué tan bien vende el producto en conjunto.
+    var costoPorCajaPorFruta = {};
+    grupos.forEach(function(g){ costoPorCajaPorFruta[g.fruta] = g.costoPorCajaPooled; });
+
     var productos = null;
     if (vistaDetalleVentas === "producto") {
-      var costoPorCajaPorFruta = {};
-      grupos.forEach(function(g){ costoPorCajaPorFruta[g.fruta] = g.costoPorCajaPooled; });
-      var prodMap = {};
-      datos.forEach(function(r){
-        var entries = filasVenta(r);
-        if (!entries.length) return;
-        var qty = parseFloat(r[1]) || 1;
-        var importeTotal = (parseFloat(r[3]) || 0) * qty;
-        var nombreComercial = entries[0].nombreComercial;
-        var presentacion = entries[0].presentacion;
-        var key = nombreComercial + "||" + presentacion;
-        if (!prodMap[key]) prodMap[key] = { nombreComercial:nombreComercial, presentacion:presentacion, cantidad:0, importe:0, costo:0, frutas:{} };
-        prodMap[key].cantidad += qty;
-        prodMap[key].importe += importeTotal;
-        entries.forEach(function(e){
-          prodMap[key].frutas[e.fruta] = true;
-          prodMap[key].costo += (e.costo != null) ? e.costo : (e.cajas || 0) * (costoPorCajaPorFruta[e.fruta] || 0);
-        });
+      var gruposPorProducto = {};
+      tabla.forEach(function(f){
+        var key = f.nombreComercial + "||" + f.presentacion;
+        if (!gruposPorProducto[key]) gruposPorProducto[key] = { nombreComercial:f.nombreComercial, presentacion:f.presentacion, rows:[], importe:0 };
+        gruposPorProducto[key].rows.push(f);
+        gruposPorProducto[key].importe += f.importe;
       });
-      productos = Object.keys(prodMap).map(function(k){
-        var p = prodMap[k];
+      productos = Object.keys(gruposPorProducto).map(function(k){
+        var p = gruposPorProducto[k];
+        p.rows.sort(function(a,b){ return a.fruta.localeCompare(b.fruta); });
+        p.costo = p.rows.reduce(function(s,f){
+          return s + f.costoConocido + f.cajasDesconocidas * (costoPorCajaPorFruta[f.fruta] || 0);
+        }, 0);
         p.utilidad = p.importe - p.costo;
-        p.frutasList = Object.keys(p.frutas).sort().join(" + ");
         return p;
       });
       productos.sort(function(a,b){
@@ -772,15 +770,46 @@ function renderTablero() {
       productos.forEach(function(p){
         var utilStyleP = p.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
         var pctP = p.importe > 0 ? (p.utilidad / p.importe * 100) : 0;
-        html += '<tr class="cliente-row" style="cursor:default">'+
-          '<td>'+p.nombreComercial+'<div class="cliente-sub">'+p.frutasList+'</div></td>'+
-          '<td style="color:#6b9e6b">'+p.presentacion+'</td>'+
-          '<td style="text-align:right">'+(Math.round(p.cantidad*100)/100)+'</td>'+
-          '<td style="text-align:right">$'+p.importe.toFixed(0)+'</td>'+
+        var key = p.nombreComercial + "||" + p.presentacion;
+        var multiFruta = p.rows.length > 1;
+        if (!multiFruta) {
+          // Una sola fruta: no hay nada que desglosar, se muestra directo.
+          html += '<tr class="cliente-row" style="cursor:default">'+
+            '<td>'+p.nombreComercial+'<div class="cliente-sub">'+p.rows[0].fruta+'</div></td>'+
+            '<td style="color:#6b9e6b">'+p.presentacion+'</td>'+
+            '<td style="text-align:right">'+(Math.round(p.rows[0].cantidad*100)/100)+'</td>'+
+            '<td style="text-align:right">$'+p.importe.toFixed(0)+'</td>'+
+            '<td style="text-align:right;color:#ffb74d">$'+p.costo.toFixed(0)+'</td>'+
+            '<td style="text-align:right;'+utilStyleP+'">$'+p.utilidad.toFixed(0)+'</td>'+
+            '<td style="text-align:right;'+utilStyleP+'">'+pctP.toFixed(0)+'%</td>'+
+          '</tr>';
+          return;
+        }
+        var abiertoP = !!productoExpandido[key];
+        html += '<tr class="cliente-row producto-group-row" data-producto="'+key.replace(/"/g,"&quot;")+'">'+
+          '<td colspan="2" style="font-weight:bold;color:#e8f5e8">'+(abiertoP?"▲":"▼")+' '+p.nombreComercial+' <span class="cliente-sub">'+p.rows.length+' frutas</span></td>'+
+          '<td style="text-align:right;color:#6b9e6b">—</td>'+
+          '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+p.importe.toFixed(0)+'</td>'+
           '<td style="text-align:right;color:#ffb74d">$'+p.costo.toFixed(0)+'</td>'+
-          '<td style="text-align:right;'+utilStyleP+'">$'+p.utilidad.toFixed(0)+'</td>'+
-          '<td style="text-align:right;'+utilStyleP+'">'+pctP.toFixed(0)+'%</td>'+
+          '<td style="text-align:right;font-weight:bold;'+utilStyleP+'">$'+p.utilidad.toFixed(0)+'</td>'+
+          '<td style="text-align:right;font-weight:bold;'+utilStyleP+'">'+pctP.toFixed(0)+'%</td>'+
         '</tr>';
+        if (abiertoP) {
+          p.rows.forEach(function(f){
+            var costoFila = f.costoConocido + f.cajasDesconocidas * (costoPorCajaPorFruta[f.fruta] || 0);
+            var utilFila = f.importe - costoFila;
+            var pctFila = f.importe > 0 ? (utilFila / f.importe * 100) : 0;
+            html += '<tr class="detail-row">'+
+              '<td>'+f.fruta+'</td>'+
+              '<td style="color:#6b9e6b">'+p.presentacion+'</td>'+
+              '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
+              '<td style="text-align:right">$'+f.importe.toFixed(0)+'</td>'+
+              '<td style="text-align:right;color:#ffb74d">$'+costoFila.toFixed(0)+'</td>'+
+              '<td style="text-align:right">$'+utilFila.toFixed(0)+'</td>'+
+              '<td style="text-align:right">'+pctFila.toFixed(0)+'%</td>'+
+            '</tr>';
+          });
+        }
       });
     } else {
       grupos.forEach(function(g){
@@ -880,6 +909,13 @@ function renderTablero() {
   container.querySelectorAll(".vista-toggle-btn").forEach(function(btn){
     btn.addEventListener("click", function(){
       vistaDetalleVentas = this.dataset.vista;
+      renderTablero();
+    });
+  });
+  container.querySelectorAll(".producto-group-row").forEach(function(row){
+    row.addEventListener("click", function(){
+      var key = this.dataset.producto;
+      productoExpandido[key] = !productoExpandido[key];
       renderTablero();
     });
   });

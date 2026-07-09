@@ -683,6 +683,7 @@ function renderTablero() {
       var g = gruposPorFruta[fr];
       g.costo = costoPorFruta[fr] || 0;
       g.utilidad = g.importe - g.costo;
+      g.pct = g.importe > 0 ? (g.utilidad / g.importe * 100) : 0;
       g.costoPorCajaPooled = g.cajasDesconocidas > 0 ? (g.costo - g.costoConocido) / g.cajasDesconocidas : 0;
       return g;
     });
@@ -700,7 +701,9 @@ function renderTablero() {
       ventaDesc:    function(a,b){ return b.importe - a.importe; },
       ventaAsc:     function(a,b){ return a.importe - b.importe; },
       utilidadDesc: function(a,b){ return b.utilidad - a.utilidad; },
-      utilidadAsc:  function(a,b){ return a.utilidad - b.utilidad; }
+      utilidadAsc:  function(a,b){ return a.utilidad - b.utilidad; },
+      pctDesc:      function(a,b){ return b.pct - a.pct; },
+      pctAsc:       function(a,b){ return a.pct - b.pct; }
     };
 
     // ── Vista "por producto" — agrupa las mismas filas de `tabla` por nombre
@@ -730,6 +733,7 @@ function renderTablero() {
           return s + f.costoConocido + f.cajasDesconocidas * (costoPorCajaPorFruta[f.fruta] || 0);
         }, 0);
         p.utilidad = p.importe - p.costo;
+        p.pct = p.importe > 0 ? (p.utilidad / p.importe * 100) : 0;
         return p;
       });
       productos.sort(function(a,b){
@@ -754,8 +758,10 @@ function renderTablero() {
           '<option value="alfabetico"'+(ordenDetalleVentas==="alfabetico"?" selected":"")+'>A-Z</option>'+
           '<option value="ventaDesc"'+(ordenDetalleVentas==="ventaDesc"?" selected":"")+'>Venta: mayor a menor</option>'+
           '<option value="ventaAsc"'+(ordenDetalleVentas==="ventaAsc"?" selected":"")+'>Venta: menor a mayor</option>'+
-          '<option value="utilidadDesc"'+(ordenDetalleVentas==="utilidadDesc"?" selected":"")+'>Utilidad: mayor a menor</option>'+
-          '<option value="utilidadAsc"'+(ordenDetalleVentas==="utilidadAsc"?" selected":"")+'>Utilidad: menor a mayor</option>'+
+          '<option value="utilidadDesc"'+(ordenDetalleVentas==="utilidadDesc"?" selected":"")+'>Utilidad $: mayor a menor</option>'+
+          '<option value="utilidadAsc"'+(ordenDetalleVentas==="utilidadAsc"?" selected":"")+'>Utilidad $: menor a mayor</option>'+
+          '<option value="pctDesc"'+(ordenDetalleVentas==="pctDesc"?" selected":"")+'>% Utilidad: mayor a menor</option>'+
+          '<option value="pctAsc"'+(ordenDetalleVentas==="pctAsc"?" selected":"")+'>% Utilidad: menor a mayor</option>'+
         '</select>'+
       '</div>'+
     '</div>';

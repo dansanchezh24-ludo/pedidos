@@ -443,7 +443,7 @@ function filasVenta(r) {
     return [{ fruta:fn, nombreComercial:nombreRaw, presentacion:presFS, cantidad:qty*multFS, importe:importeTotal, mes:mes, costo:costoFS, cajas:cajasFS }];
   }
   if (p.tipo === "clamshell") {
-    var nomC = nombreRaw.split("·")[0].trim();
+    var nomC = normalizarProducto(nombreRaw.split("·")[0].trim());
     var multC = p.mult || 1;
     var frutasC = p.frutas.filter(Boolean);
     if (!frutasC.length) return [{ fruta:"(sin fruta)", nombreComercial:nomC, presentacion:"clamshell", cantidad:qty*multC, importe:importeTotal, mes:mes, costo:0 }];

@@ -133,8 +133,16 @@ function normalizarFruta(nombre) {
 
 // Nombres viejos de productos (no frutas) que cambiaron de nombre pero siguen
 // costeándose igual — ej. "Ludo Antojo" es el nombre viejo de "Elote Select".
+// Los "Ludo X" -> "Ludo Berry X" son el mismo rebranding de nombres que sufrieron
+// los paquetes de berries (ver CATALOGO): pedidos viejos en Sheets todavía traen
+// el nombre corto y sin esto se ven como un producto aparte del actual.
 var ALIAS_PRODUCTOS = {
   "Ludo Antojo": "Elote Select",
+  "Ludo Select": "Ludo Berry Select",
+  "Ludo Pack": "Ludo Berry 3-Pack",
+  "Ludo Mix": "Ludo Berry Mix",
+  "Ludo Tomatizado": "Cherry 3-Pack",
+  "Ludo Fresh": "Cherry Mix",
 };
 function normalizarProducto(nombre) {
   return ALIAS_PRODUCTOS[nombre] || nombre;

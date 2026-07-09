@@ -150,12 +150,14 @@ var ELOTE_FRUTA = {
   "Ludo Elotiza":    "Elote amarillo",
   "Ludo Parrillada": "Elote amarillo",
   "Ludo Fiesta":     "Elote amarillo",
-  // Elote Blanco — línea nueva (2026-07-08), se agrupan aparte del "Elote blanco" viejo
-  "Elote Blanco":        "Elote Blanco",
-  "Elote Blanco Duo":    "Elote Blanco",
-  "Elote Blanco 3-Pack": "Elote Blanco",
-  "Elote Blanco 4-Pack": "Elote Blanco",
-  "Elote Blanco 5-Pack": "Elote Blanco",
+  // Elote Blanco — mismos paquetes de siempre, solo subió de costo el 2026-07-08
+  // (ver HIST_COSTO_ELOTE); se agrupan con "Elote blanco" para que el reporte
+  // de ventas no los parta en dos productos distintos.
+  "Elote Blanco":        "Elote blanco",
+  "Elote Blanco Duo":    "Elote blanco",
+  "Elote Blanco 3-Pack": "Elote blanco",
+  "Elote Blanco 4-Pack": "Elote blanco",
+  "Elote Blanco 5-Pack": "Elote blanco",
 };
 
 function costoVigente(historial, fecha) {

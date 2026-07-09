@@ -390,6 +390,13 @@ var ELOTE_NOMBRE_COMERCIAL = { "Elote amarillo":"Elote Select", "Elote Select":"
  * para que la suma total no se duplique. Es el punto único de clasificación
  * reutilizado por la tabla de detalle y por el resumen mensual.
  */
+// Además de fruta/nombreComercial/presentacion/cantidad/importe, cada fila trae:
+//   costo: costo real exacto de esa línea (elotes, piezas, kg y berries por
+//          clamshell son deterministos, sin redondeo) — o null si el costo
+//          solo se conoce agrupando por bote/fecha (ver calcularCostoPorFruta).
+//   cajas: unidades tipo-clamshell aportadas (1 bote = CAJAS_POR_BOTE cajas),
+//          solo relevante cuando costo es null, para repartir el costo pooled
+//          de la fruta proporcional a cajas consumidas (no a venta en pesos).
 function filasVenta(r) {
   var nombreRaw = r[0] || "";
   var qty = parseFloat(r[1]) || 1;
@@ -400,61 +407,74 @@ function filasVenta(r) {
   var p = parsearProducto(nombreRaw, qty);
 
   if (!p.tipo) {
-    return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", cantidad:qty, importe:importeTotal, mes:mes }];
+    // Sin categoría reconocida: se usa el costo ya calculado y guardado al
+    // capturar el pedido (columna "subtotal costo"), igual que calcularCompraProveedor.
+    return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", cantidad:qty, importe:importeTotal, mes:mes, costo: parseFloat(r[7])||0 }];
   }
   if (p.tipo === "elote") {
     var en = p.frutas[0];
-    return [{ fruta: ELOTE_FRUTA[en] || en, nombreComercial: ELOTE_NOMBRE_COMERCIAL[en] || en, presentacion:"charola", cantidad:qty, importe:importeTotal, mes:mes }];
+    var costoElote = qty * costoVigente(HIST_COSTO_ELOTE[en], fecha).costo;
+    return [{ fruta: ELOTE_FRUTA[en] || en, nombreComercial: ELOTE_NOMBRE_COMERCIAL[en] || en, presentacion:"charola", cantidad:qty, importe:importeTotal, mes:mes, costo: costoElote }];
   }
   if (p.tipo === "pieza_directa") {
     var pn = p.frutas[0];
-    return [{ fruta:pn, nombreComercial:pn, presentacion:"pieza", cantidad:qty, importe:importeTotal, mes:mes }];
+    var costoPieza = qty * costoVigente(HIST_COSTO_PIEZA[pn], fecha).costo;
+    return [{ fruta:pn, nombreComercial:pn, presentacion:"pieza", cantidad:qty, importe:importeTotal, mes:mes, costo: costoPieza }];
   }
   if (p.tipo === "mercado_kg") {
     var mn = p.frutas[0];
     var suf = parseSufijoUnidad(nombreRaw);
     var unidadLbl = suf.unidad === "gramos" ? "gramos" : suf.unidad === "pieza" ? "pieza" : "kg";
-    return [{ fruta:mn, nombreComercial:mn, presentacion:unidadLbl, cantidad:qty, importe:importeTotal, mes:mes }];
+    var costoMercado = p.kgEquivalente * costoVigente(HIST_COSTO_PROVEEDOR_KG[mn], fecha).costo;
+    return [{ fruta:mn, nombreComercial:mn, presentacion:unidadLbl, cantidad:qty, importe:importeTotal, mes:mes, costo: costoMercado }];
   }
   if (p.tipo === "fruta_suelta") {
     var fn = p.frutas[0];
     var multFS = p.mult || 1;
+    var esPorClamshellFS = HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn);
+    var cajasFS = esPorClamshellFS ? (qty*multFS) : (qty*multFS*CAJAS_POR_BOTE);
+    var costoFS = esPorClamshellFS ? (cajasFS * costoVigente(HIST_COSTO_PROVEEDOR_CLAMSHELL[fn], fecha).costo) : null;
     if (NOMBRE_BOTE_DIRECTO[fn]) {
-      return [{ fruta:fn, nombreComercial:NOMBRE_BOTE_DIRECTO[fn], presentacion:"bote", cantidad:qty*multFS, importe:importeTotal, mes:mes }];
+      return [{ fruta:fn, nombreComercial:NOMBRE_BOTE_DIRECTO[fn], presentacion:"bote", cantidad:qty*multFS, importe:importeTotal, mes:mes, costo:costoFS, cajas:cajasFS }];
     }
     var presFS = fn === "Cereza" ? "bote" : "clamshell";
-    return [{ fruta:fn, nombreComercial:nombreRaw, presentacion:presFS, cantidad:qty*multFS, importe:importeTotal, mes:mes }];
+    return [{ fruta:fn, nombreComercial:nombreRaw, presentacion:presFS, cantidad:qty*multFS, importe:importeTotal, mes:mes, costo:costoFS, cajas:cajasFS }];
   }
   if (p.tipo === "clamshell") {
     var nomC = nombreRaw.split("·")[0].trim();
     var multC = p.mult || 1;
     var frutasC = p.frutas.filter(Boolean);
-    if (!frutasC.length) return [{ fruta:"(sin fruta)", nombreComercial:nomC, presentacion:"clamshell", cantidad:qty*multC, importe:importeTotal, mes:mes }];
+    if (!frutasC.length) return [{ fruta:"(sin fruta)", nombreComercial:nomC, presentacion:"clamshell", cantidad:qty*multC, importe:importeTotal, mes:mes, costo:0 }];
     var importeC = importeTotal / frutasC.length;
     return frutasC.map(function(fn){
-      return { fruta:fn, nombreComercial:nomC, presentacion:"clamshell", cantidad:qty*multC, importe:importeC, mes:mes };
+      var cajasC = qty*multC;
+      var esPorClamshellC = HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn);
+      var costoC = esPorClamshellC ? (cajasC * costoVigente(HIST_COSTO_PROVEEDOR_CLAMSHELL[fn], fecha).costo) : null;
+      return { fruta:fn, nombreComercial:nomC, presentacion:"clamshell", cantidad:cajasC, importe:importeC, mes:mes, costo:costoC, cajas:cajasC };
     });
   }
   if (p.tipo === "familiar") {
     var nomF = nombreRaw.split("·")[0].trim();
     var frutasF = p.frutas.filter(Boolean);
-    if (!frutasF.length) return [{ fruta:"(sin fruta)", nombreComercial:nomF, presentacion:"bote", cantidad:qty, importe:importeTotal, mes:mes }];
+    if (!frutasF.length) return [{ fruta:"(sin fruta)", nombreComercial:nomF, presentacion:"bote", cantidad:qty, importe:importeTotal, mes:mes, costo:0 }];
     var importeF = importeTotal / frutasF.length;
     return frutasF.map(function(fn){
-      return { fruta:fn, nombreComercial:nomF, presentacion:"bote", cantidad:qty, importe:importeF, mes:mes };
+      return { fruta:fn, nombreComercial:nomF, presentacion:"bote", cantidad:qty, importe:importeF, mes:mes, costo:null, cajas:qty*CAJAS_POR_BOTE };
     });
   }
-  return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", cantidad:qty, importe:importeTotal, mes:mes }];
+  return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", cantidad:qty, importe:importeTotal, mes:mes, costo: parseFloat(r[7])||0 }];
 }
 
 function calcularTablaVentas(datos) {
-  var filas = {}; // key "fruta||nombreComercial||presentacion" -> {fruta,nombreComercial,presentacion,cantidad,importe}
+  var filas = {}; // key "fruta||nombreComercial||presentacion" -> {fruta,nombreComercial,presentacion,cantidad,importe,costoConocido,cajasDesconocidas}
   datos.forEach(function(r) {
     filasVenta(r).forEach(function(f){
       var key = f.fruta + "||" + f.nombreComercial + "||" + f.presentacion;
-      if (!filas[key]) filas[key] = { fruta:f.fruta, nombreComercial:f.nombreComercial, presentacion:f.presentacion, cantidad:0, importe:0 };
+      if (!filas[key]) filas[key] = { fruta:f.fruta, nombreComercial:f.nombreComercial, presentacion:f.presentacion, cantidad:0, importe:0, costoConocido:0, cajasDesconocidas:0 };
       filas[key].cantidad += f.cantidad;
       filas[key].importe += f.importe;
+      if (f.costo != null) filas[key].costoConocido += f.costo;
+      else filas[key].cajasDesconocidas += (f.cajas || 0);
     });
   });
   return Object.values(filas).sort(function(a,b){
@@ -638,24 +658,30 @@ function renderTablero() {
   });
 
   // ── Detalle de ventas por producto (fruta · nombre comercial · presentación) ──
-  // Agrupado por fruta (colapsado por default); costo/utilidad de cada fruta
-  // salen de calcularCostoPorFruta (pago real al proveedor, no aproximado) y
-  // se prorratean a las filas de producto dentro del grupo según su parte del
-  // importe — el subtotal por fruta sí es exacto, el desglose por producto es
-  // una repartición proporcional de ese mismo total.
+  // Agrupado por fruta (colapsado por default). El costo de cada producto es
+  // exacto cuando es determinístico (elotes, piezas, kg, berries por clamshell
+  // individual — sin redondeo a bote). Las berries que se compran por bote
+  // completo (Zarzamora/Frambuesa/Blueberry/Cereza cuando no vienen en Ludo
+  // Pack/Select/Individual) solo se conocen agrupadas por fecha — ver
+  // calcularCostoPorFruta — así que ese remanente se reparte entre esas líneas
+  // proporcional a cajas consumidas (no a venta en pesos, que mezclaría
+  // productos con márgenes distintos). El subtotal por fruta siempre es exacto.
   var tabla = calcularTablaVentas(datos);
   if (tabla.length) {
     var costoPorFruta = calcularCostoPorFruta(datos);
     var gruposPorFruta = {};
     tabla.forEach(function(f){
-      if (!gruposPorFruta[f.fruta]) gruposPorFruta[f.fruta] = { fruta:f.fruta, rows:[], importe:0 };
+      if (!gruposPorFruta[f.fruta]) gruposPorFruta[f.fruta] = { fruta:f.fruta, rows:[], importe:0, costoConocido:0, cajasDesconocidas:0 };
       gruposPorFruta[f.fruta].rows.push(f);
       gruposPorFruta[f.fruta].importe += f.importe;
+      gruposPorFruta[f.fruta].costoConocido += f.costoConocido;
+      gruposPorFruta[f.fruta].cajasDesconocidas += f.cajasDesconocidas;
     });
     var grupos = Object.keys(gruposPorFruta).map(function(fr){
       var g = gruposPorFruta[fr];
       g.costo = costoPorFruta[fr] || 0;
       g.utilidad = g.importe - g.costo;
+      g.costoPorCajaPooled = g.cajasDesconocidas > 0 ? (g.costo - g.costoConocido) / g.cajasDesconocidas : 0;
       return g;
     });
     grupos.forEach(function(g){
@@ -706,7 +732,7 @@ function renderTablero() {
       '</tr>';
       if (abierto) {
         g.rows.forEach(function(f){
-          var costoFila = g.importe > 0 ? (f.importe / g.importe) * g.costo : 0;
+          var costoFila = f.costoConocido + f.cajasDesconocidas * g.costoPorCajaPooled;
           var utilFila = f.importe - costoFila;
           var pctFila = f.importe > 0 ? (utilFila / f.importe * 100) : 0;
           html += '<tr class="detail-row">'+

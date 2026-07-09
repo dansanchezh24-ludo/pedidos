@@ -60,11 +60,16 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
   <div id="captura" class="view active">
     <div>
       <label>NOMBRE DEL CLIENTE</label>
-      <input id="cliente" type="text" placeholder="Ej. Melys, Adriana...">
+      <input id="cliente" type="text" placeholder="Ej. Melys, Adriana..." list="clientesList" autocomplete="off">
+      <datalist id="clientesList"></datalist>
     </div>
     <div>
       <label>FECHA DE ENTREGA</label>
       <input id="fecha" type="date">
+    </div>
+    <div>
+      <label>HORA DE ENTREGA (APROX.)</label>
+      <input id="horaEntrega" type="time">
     </div>
     <div>
       <label>UBICACIÓN DE ENTREGA</label>
@@ -74,7 +79,7 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
         <button class="ubi-btn" id="ubiGeneral">📍 General</button>
       </div>
     </div>
-    <div id="direccionWrap" style="display:none">
+    <div id="direccionWrap">
       <label>DIRECCIÓN DE ENTREGA</label>
       <input id="direccion" type="text" placeholder="Calle, número, colonia...">
     </div>
@@ -186,9 +191,31 @@ function setUbi(u) {
   document.getElementById("ubiAzaleas").classList.toggle("active", u==="Azaleas");
   document.getElementById("ubiSereno").classList.toggle("active",  u==="El Sereno");
   document.getElementById("ubiGeneral").classList.toggle("active", u==="General");
-  document.getElementById("direccionWrap").style.display = (u==="General") ? "block" : "none";
   renderItems();
 }
+
+// ─── Autocompletar cliente ───
+// Trae los nombres de clientes ya usados en pedidos anteriores para sugerirlos
+// mientras se escribe, y así el equipo reuse el mismo nombre exacto en vez de
+// escribir variantes ("Martha G3" / "Martha Pinedo" / "Pinedo G3" para la misma persona).
+async function cargarClientesConocidos() {
+  try {
+    var res = await fetch(SCRIPT_URL+"?action=read");
+    var data = await res.json();
+    var rows = (data.rows||[]).slice(1).filter(function(r){ return r[0]&&r[2]; });
+    var nombresSet = {};
+    rows.forEach(function(r){
+      var n = (r[2]||"").trim().replace(/\s+/g," ");
+      if (n) nombresSet[n] = true;
+    });
+    var nombres = Object.keys(nombresSet).sort();
+    var datalist = document.getElementById("clientesList");
+    datalist.innerHTML = nombres.map(function(n){ return '<option value="'+n.replace(/"/g,"&quot;")+'">'; }).join("");
+  } catch (e) {
+    // Sin conexión o error de red: la captura sigue funcionando con texto libre, solo sin sugerencias.
+  }
+}
+cargarClientesConocidos();
 
 document.getElementById("addBtn").addEventListener("click", function(){
   items.push(nuevoItem("ludo_select"));
@@ -334,8 +361,11 @@ function nombreCompleto(item) {
 
 // ─── Guardar ───
 async function guardar() {
-  var cliente   = document.getElementById("cliente").value.trim();
+  // Normaliza espacios (incluyendo dobles/al centro) para que el mismo cliente
+  // no se registre como entradas distintas por diferencias de espaciado.
+  var cliente   = document.getElementById("cliente").value.trim().replace(/\s+/g," ");
   var fecha     = document.getElementById("fecha").value;
+  var horaEntrega = document.getElementById("horaEntrega").value;
   var direccion = document.getElementById("direccion").value.trim();
   var errEl   = document.getElementById("error");
   var btn     = document.getElementById("saveBtn");
@@ -357,7 +387,7 @@ async function guardar() {
       var nombre=nombreCompleto(it);
       var precio=precioUnitario(cat, it);
       var v=precio*it.cantidad; var s=calcularCostoLinea(cat, it);
-      return [nombre,it.cantidad,cliente,precio,v,"Pendiente",fecha,s,s,v-s,ubicacion,direccion];
+      return [nombre,it.cantidad,cliente,precio,v,"Pendiente",fecha,s,s,v-s,ubicacion,direccion,horaEntrega];
     });
     await fetch(SCRIPT_URL+"?data="+encodeURIComponent(JSON.stringify(filas)),{mode:"no-cors"});
     var total=items.reduce(function(s,it){return s+calcularPrecioLinea(getCat(it.catId),it);},0);
@@ -366,7 +396,7 @@ async function guardar() {
         '<div style="font-size:70px;margin-bottom:16px">✅</div>'+
         '<h2 style="color:#a8e6a3;margin-bottom:8px">¡Pedido guardado!</h2>'+
         '<p style="color:#6b9e6b">'+items.length+' producto'+(items.length!==1?"s":"")+ ' de <strong style="color:#e8f5e8">'+cliente+'</strong></p>'+
-        '<p style="color:#6b9e6b;font-size:13px;margin-top:4px">📍 '+ubicacion+(ubicacion==="General"&&direccion?' — '+direccion:'')+'</p>'+
+        '<p style="color:#6b9e6b;font-size:13px;margin-top:4px">📍 '+ubicacion+(direccion?' — '+direccion:'')+(horaEntrega?' · 🕐 '+horaEntrega:'')+'</p>'+
         '<p style="color:#a8e6a3;font-size:28px;font-weight:bold;margin:8px 0">$'+fmtMoney(total)+'</p>'+
         '<p style="color:#4a7a4a;font-size:12px">Revisa tu Google Sheet ✓</p>'+
         '<button class="new-btn" id="newBtn">+ Nuevo pedido</button>'+

@@ -91,6 +91,10 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 .merma-pill { display:inline-block; font-size:11px; padding:3px 10px; border-radius:20px; font-weight:bold; }
 .merma-ok { background:rgba(76,175,80,0.2); color:#a8e6a3; }
 .merma-warn { background:rgba(255,183,77,0.15); color:#ffb74d; }
+.pagado-pill { display:inline-block; font-size:10px; padding:2px 9px; border-radius:20px; font-weight:bold; cursor:pointer; }
+.pagado-si { background:rgba(76,175,80,0.2); color:#a8e6a3; }
+.pagado-no { background:rgba(255,183,77,0.15); color:#ffb74d; }
+.pagado-pill:active { opacity:0.7; }
 /* Pedido para proveedor */
 .pedido-box { background:rgba(0,0,0,0.35); border:1px solid rgba(168,230,163,0.2); border-radius:14px; padding:16px 18px; }
 .pedido-box-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
@@ -723,9 +727,10 @@ function renderResumen() {
   var byCliente={};
   datos.forEach(function(r){
     var c=r[2]||"?"; var t=parseFloat(r[4])||0;
-    if(!byCliente[c]) byCliente[c]={total:0,items:[],ubicacion:r[10]||""};
+    if(!byCliente[c]) byCliente[c]={total:0,items:[],ubicacion:r[10]||"",direccion:r[11]||"",horaEntrega:r[12]||"",pagado:true};
     byCliente[c].total+=t;
     byCliente[c].items.push({producto:r[0],cantidad:r[1],total:t,fecha:fmtFecha(r[6])});
+    if ((r[5]||"").trim().toLowerCase() !== "pagado") byCliente[c].pagado = false;
   });
   var granTotal=datos.reduce(function(s,r){return s+(parseFloat(r[4])||0);},0);
   document.getElementById("granTotalLabel").textContent=filtro?"TOTAL · "+filtro:"TOTAL GENERAL";
@@ -743,10 +748,15 @@ function renderResumen() {
     var nombre=entry[0],info=entry[1],isOpen=expandido===nombre;
     var tr=document.createElement("tr"); tr.className="cliente-row";
     var ubiTag=info.ubicacion?'<span style="font-size:11px;color:#5a8a5a"> 📍'+info.ubicacion+'</span>':'';
+    var direccionTag=info.direccion?'<div class="cliente-sub">🏠 '+info.direccion+'</div>':'';
+    var horaTag=info.horaEntrega?'<span style="font-size:11px;color:#5a8a5a"> · 🕐 '+info.horaEntrega+'</span>':'';
+    var pagadoTag=info.pagado
+      ? '<span class="pagado-pill pagado-si">✅ Pagado</span>'
+      : '<span class="pagado-pill pagado-no">⏳ Pendiente</span>';
     tr.innerHTML=
-      '<td><div class="cliente-name">'+nombre+ubiTag+'</div><div class="cliente-sub">'+info.items.length+' producto'+(info.items.length!==1?"s":"")+'</div></td>'+
+      '<td><div class="cliente-name">'+nombre+ubiTag+horaTag+'</div>'+direccionTag+'<div class="cliente-sub">'+info.items.length+' producto'+(info.items.length!==1?"s":"")+'</div></td>'+
       '<td style="color:#6b9e6b;font-size:13px">'+(isOpen?"▲":"▼")+'</td>'+
-      '<td>$'+info.total.toFixed(0)+'</td>';
+      '<td>$'+info.total.toFixed(0)+'<div style="margin-top:4px">'+pagadoTag+'</div></td>';
     tr.addEventListener("click",function(){expandido=(expandido===nombre)?null:nombre;renderResumen();});
     tbody.appendChild(tr);
     if(isOpen){

@@ -894,6 +894,26 @@ function calcularCompraProveedor(datos, fecha) {
     };
   });
 
+  // Ludo Berry Max — desglose por pedido de qué comprar (1 Fresa + 1 de cada fruta elegida),
+  // usando el costo por bote ya calculado arriba para cada fruta. Solo informativo/visual:
+  // no se suma aparte a costoTotalProveedor (esas cajas ya están contadas dentro de `berries`).
+  var ludoBerryMaxResult = [];
+  datos.forEach(function(r) {
+    var nombreRaw = r[0] || "";
+    if (nombreRaw.indexOf("Ludo Berry Max") === -1) return;
+    var qty = parseFloat(r[1]) || 1;
+    var p = parsearProducto(nombreRaw, qty);
+    var items = p.frutas.map(function(fn) {
+      var costoU = berriesResult[fn] ? berriesResult[fn].costoUnitario : 0;
+      return { fruta: fn, cantidad: qty, costoUnitario: costoU, subtotal: costoU * qty };
+    });
+    ludoBerryMaxResult.push({
+      cliente: r[2] || "?",
+      items: items,
+      total: items.reduce(function(s, it) { return s + it.subtotal; }, 0)
+    });
+  });
+
   var elotesResult = {};
   var costoTotalElotes = 0;
   Object.keys(elotes).forEach(function(en) {
@@ -975,6 +995,7 @@ function calcularCompraProveedor(datos, fecha) {
     piezas: piezasResult,
     mercadoKg: mercadoKgResult,
     otros: otrosResult,
+    ludoBerryMax: ludoBerryMaxResult,
     ventaTotal: ventaTotal,
     costoTotalProveedor: costoTotalProveedor,
     gananciaNeta: gananciaNeta
@@ -999,7 +1020,7 @@ function renderProveedor() {
   }
 
   var calc = calcularCompraProveedor(datos, filtro);
-  var B = calc.berries, E = calc.elotes, P = calc.piezas, M = calc.mercadoKg, O = calc.otros;
+  var B = calc.berries, E = calc.elotes, P = calc.piezas, M = calc.mercadoKg, O = calc.otros, MAX = calc.ludoBerryMax;
 
   // ── Resumen superior ──
   var gnClass = calc.gananciaNeta < 0 ? "rojo" : "";
@@ -1086,6 +1107,33 @@ function renderProveedor() {
       '</div>';
     container.appendChild(card);
   });
+
+  // ── Tarjeta Ludo Berry Max — qué comprar por pedido (1 de cada fruta elegida) ──
+  // Solo informativo: las cajas de Fresa/Zarzamora/Frambuesa/Blueberry que necesita
+  // cada pedido de Max ya están sumadas dentro de las tarjetas por fruta de arriba;
+  // esta tarjeta solo desglosa esa necesidad por pedido para que quede claro qué comprar.
+  if (MAX && MAX.length > 0) {
+    var mcard = document.createElement("div");
+    mcard.className = "elote-card";
+    var totalMax = MAX.reduce(function(s,o){ return s+o.total; }, 0);
+    mcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">✨ Ludo Berry Max — qué comprar</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+totalMax.toFixed(0)+'</span></div>';
+    MAX.forEach(function(o){
+      var mrow = document.createElement("div");
+      mrow.className = "elote-row";
+      mrow.innerHTML =
+        '<div>'+
+          '<div style="color:#e8f5e8">'+o.cliente+'</div>'+
+          '<div style="color:#6b9e6b;font-size:11px;margin-top:3px">'+
+            o.items.map(function(it){ return emojiDeFruta(it.fruta)+' '+it.cantidad+' '+it.fruta+' ($'+it.subtotal.toFixed(0)+')'; }).join(' · ')+
+          '</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="color:#a8e6a3;font-size:13px;font-weight:bold">= $'+o.total.toFixed(0)+'</div>'+
+        '</div>';
+      mcard.appendChild(mrow);
+    });
+    container.appendChild(mcard);
+  }
 
   // ── Tarjeta elotes ──
   if (Object.keys(E).length > 0) {

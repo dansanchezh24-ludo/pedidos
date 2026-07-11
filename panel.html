@@ -1473,6 +1473,11 @@ function calcularCompraProveedor(datos, fecha) {
   };
 }
 
+// El proveedor entrega el elote (amarillo y blanco) en charola, no por pieza suelta.
+function etiquetaCharola(n) {
+  return n + ' ' + (n === 1 ? 'charola' : 'charolas');
+}
+
 function renderProveedor() {
   var filtro = document.getElementById("fechaFiltroP").value;
   var container = document.getElementById("proveedorResumen");
@@ -1620,11 +1625,11 @@ function renderProveedor() {
         '<div>'+
           '<div style="color:#e8f5e8">'+en+'</div>'+
           '<div style="color:#6b9e6b;font-size:11px;margin-top:3px">'+
-            e.clienteDetalle.map(function(cd){return cd.nombre+': '+cd.piezas+'pz';}).join(' · ')+
+            e.clienteDetalle.map(function(cd){return cd.nombre+': '+etiquetaCharola(cd.piezas);}).join(' · ')+
           '</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="color:#ffcc02;font-weight:bold">'+e.piezas+' pz × $'+e.costoUnitario+'</div>'+
+          '<div style="color:#ffcc02;font-weight:bold">'+etiquetaCharola(e.piezas)+' × $'+e.costoUnitario+'</div>'+
           '<div style="color:#a8e6a3;font-size:13px">= $'+e.costoTotal+'</div>'+
           '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+e.costoVigenteDesde+'</div>'+
         '</div>';
@@ -1735,7 +1740,7 @@ function renderProveedor() {
   });
   Object.keys(E).sort().forEach(function(en){
     var e = E[en];
-    lineas.push(en+": "+e.piezas+" pz — $"+e.costoTotal);
+    lineas.push(en+": "+etiquetaCharola(e.piezas)+" — $"+e.costoTotal);
   });
   Object.keys(P).sort().forEach(function(pn){
     var p = P[pn];
@@ -1782,7 +1787,7 @@ function renderProveedor() {
   Object.keys(E).sort().forEach(function(en){
     var e = E[en];
     lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-fruta">🌽 '+en+'<span class="pedido-cant">'+e.piezas+' pz</span></span>'+
+      '<span class="pedido-fruta">🌽 '+en+'<span class="pedido-cant">'+etiquetaCharola(e.piezas)+'</span></span>'+
       '<span class="pedido-costo">$'+e.costoTotal+'</span>'+
     '</div>';
   });

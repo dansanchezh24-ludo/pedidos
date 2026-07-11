@@ -527,7 +527,16 @@ function fmtPeriodoLabel(key, agrupacion) {
   var meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
   var partes = key.split("-");
   if (agrupacion === "mes") return meses[parseInt(partes[1],10)-1] + " " + partes[0].slice(2);
-  return partes[2] + " " + meses[parseInt(partes[1],10)-1]; // semana: día del lunes + mes
+  // semana: key es el lunes de la semana (YYYY-MM-DD). La barra suma toda la semana
+  // (lunes a domingo), así que se etiqueta con el rango completo — mostrar solo el
+  // lunes hacía parecer que la venta ocurrió justo ese día, cuando pudo ser cualquier
+  // día de esa semana.
+  var inicio = new Date(key + "T00:00:00");
+  var fin = new Date(inicio);
+  fin.setDate(fin.getDate() + 6);
+  var mIni = meses[inicio.getMonth()], mFin = meses[fin.getMonth()];
+  if (mIni === mFin) return inicio.getDate() + "–" + fin.getDate() + " " + mFin;
+  return inicio.getDate() + " " + mIni + "–" + fin.getDate() + " " + mFin;
 }
 
 /**

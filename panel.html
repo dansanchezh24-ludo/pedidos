@@ -313,12 +313,8 @@ function calcularKPIsGlobal(datos) {
   var productosVendidos = datos.reduce(function(s,r){ return s+(parseFloat(r[1])||0); },0);
   // Desglose por presentación — sumar botes con botes, clamshells con clamshells, etc.
   // en vez de un solo total que mezcla unidades sin sentido (kg + piezas + botes...).
-  var porPresentacion = {};
-  datos.forEach(function(r){
-    filasVenta(r).forEach(function(f){
-      porPresentacion[f.presentacion] = (porPresentacion[f.presentacion] || 0) + f.cantidad;
-    });
-  });
+  // Incluye venta/costo/utilidad de cada presentación (ver calcularUtilidadPorPresentacion).
+  var porPresentacion = calcularUtilidadPorPresentacion(datos);
   var clientesSet = {};
   var porUbicacion = {};
   datos.forEach(function(r){
@@ -366,6 +362,43 @@ function calcularCostoPorFruta(datos) {
     Object.keys(c.otros).forEach(function(pn){ suma("(sin categoría)", c.otros[pn].costoTotal); });
   });
   return costoPorFruta;
+}
+
+/**
+ * Venta, costo y utilidad agrupados por presentación (bote/clamshell/charola/kg/pieza).
+ * El costo de una fruta que se compra por bote solo se conoce agrupado por fruta (el
+ * redondeo a botes usa la demanda combinada de bote+clamshell, ver calcularCompraProveedor),
+ * así que ese costo se reparte entre las líneas de cada fruta proporcional a cajas
+ * consumidas — mismo criterio que ya usa la tabla de detalle de ventas.
+ */
+function calcularUtilidadPorPresentacion(datos) {
+  var tabla = calcularTablaVentas(datos);
+  var costoPorFruta = calcularCostoPorFruta(datos);
+  var porFruta = {};
+  tabla.forEach(function(f){
+    if (!porFruta[f.fruta]) porFruta[f.fruta] = { costoConocido:0, cajasDesconocidas:0 };
+    porFruta[f.fruta].costoConocido += f.costoConocido;
+    porFruta[f.fruta].cajasDesconocidas += f.cajasDesconocidas;
+  });
+  var costoPorCajaPorFruta = {};
+  Object.keys(porFruta).forEach(function(fr){
+    var g = porFruta[fr];
+    var costoTotal = costoPorFruta[fr] || 0;
+    costoPorCajaPorFruta[fr] = g.cajasDesconocidas > 0 ? (costoTotal - g.costoConocido) / g.cajasDesconocidas : 0;
+  });
+
+  var porPresentacion = {};
+  tabla.forEach(function(f){
+    if (!porPresentacion[f.presentacion]) porPresentacion[f.presentacion] = { cantidad:0, venta:0, costo:0 };
+    var costoFila = f.costoConocido + f.cajasDesconocidas * (costoPorCajaPorFruta[f.fruta] || 0);
+    porPresentacion[f.presentacion].cantidad += f.cantidad;
+    porPresentacion[f.presentacion].venta += f.importe;
+    porPresentacion[f.presentacion].costo += costoFila;
+  });
+  Object.keys(porPresentacion).forEach(function(p){
+    porPresentacion[p].utilidad = porPresentacion[p].venta - porPresentacion[p].costo;
+  });
+  return porPresentacion;
 }
 
 /**
@@ -575,13 +608,18 @@ function kpiCard(label, val, cls) {
 function kpiMini(label, val) {
   return '<div class="kpi-mini"><div class="kpi-mini-label">'+label+'</div><div class="kpi-mini-val">'+val+'</div></div>';
 }
-// Tarjeta KPI que desglosa una cantidad por presentación (bote/clamshell/charola/kg/pieza)
-// en vez de sumarlas todas juntas sin sentido.
+// Tarjeta KPI que desglosa cantidad y utilidad por presentación (bote/clamshell/charola/kg/pieza)
+// en vez de sumar todo junto sin sentido (ver calcularUtilidadPorPresentacion).
 function kpiCardPresentacion(label, porPresentacion) {
-  var items = Object.keys(porPresentacion).sort(function(a,b){ return porPresentacion[b]-porPresentacion[a]; });
+  var items = Object.keys(porPresentacion).sort(function(a,b){ return porPresentacion[b].cantidad-porPresentacion[a].cantidad; });
   var body = items.map(function(p){
-    var v = Math.round(porPresentacion[p]*100)/100;
-    return '<div style="font-size:15px;font-weight:bold;color:#e8f5e8;line-height:1.6">'+v+' <span style="font-size:11px;color:#6b9e6b;font-weight:normal">'+p+'</span></div>';
+    var d = porPresentacion[p];
+    var v = Math.round(d.cantidad*100)/100;
+    var esPerdida = d.utilidad < 0;
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;line-height:1.6">'+
+      '<span style="font-size:15px;font-weight:bold;color:#e8f5e8;white-space:nowrap">'+v+' <span style="font-size:11px;color:#6b9e6b;font-weight:normal">'+p+'</span></span>'+
+      '<span style="font-size:12px;font-weight:bold;color:'+(esPerdida?'#ff7070':'#a8e6a3')+';white-space:nowrap">'+(d.utilidad>=0?'+':'−')+'$'+Math.round(Math.abs(d.utilidad))+'</span>'+
+    '</div>';
   }).join("");
   return '<div class="kpi-card"><div class="kpi-label">'+label+'</div>'+(body||'<div class="kpi-val">0</div>')+'</div>';
 }

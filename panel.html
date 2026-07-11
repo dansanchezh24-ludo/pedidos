@@ -957,22 +957,47 @@ function fmtMesLabel(m) {
  * costo: la barra muestra el costo completo en naranja con un remate rojo
  * arriba marcando la parte del costo que no se recuperó con ventas.
  */
+// Escoge un paso "redondo" (1/2/5 × potencia de 10) para las líneas del eje Y,
+// apuntando a unas 4 divisiones — evita pasos feos como $733.
+function pasoEjeY(maxVal) {
+  var pasoCrudo = maxVal / 4;
+  var mag = Math.pow(10, Math.floor(Math.log10(pasoCrudo)));
+  var norm = pasoCrudo / mag;
+  var paso = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+  return paso * mag;
+}
+function fmtEjeY(v) {
+  if (v >= 1000) return "$" + (v % 1000 === 0 ? (v/1000) : (v/1000).toFixed(1)) + "k";
+  return "$" + v;
+}
+
 function renderGraficaVentas(datos) {
   var periodos = calcularVentasPorPeriodo(datos, periodoAgrupacion);
   if (!periodos.length) return "";
 
-  var chartH = 150, barW = 26, gap = 16, padTop = 26, padBottom = 30, padSide = 10;
+  var chartH = 150, barW = 26, gap = 38, padTop = 26, padBottom = 34, padLeft = 46, padRight = 10;
   var maxVal = Math.max.apply(null, periodos.map(function(p){ return Math.max(p.costo, p.venta); }));
   if (maxVal <= 0) maxVal = 1;
-  var svgW = padSide * 2 + periodos.length * (barW + gap) - gap;
+  var pasoY = pasoEjeY(maxVal);
+  var ejeYMax = Math.ceil(maxVal / pasoY) * pasoY;
+  var svgW = padLeft + padRight + periodos.length * (barW + gap) - gap;
   var svgH = padTop + chartH + padBottom;
   var mostrarLabels = periodos.length <= 12;
   var baseY = padTop + chartH;
 
+  var numTicks = Math.round(ejeYMax / pasoY);
+  var ejeY = "";
+  for (var t = 0; t <= numTicks; t++) {
+    var val = t * pasoY;
+    var y = baseY - (val / ejeYMax) * chartH;
+    ejeY += '<line x1="'+padLeft+'" y1="'+y+'" x2="'+svgW+'" y2="'+y+'" stroke="rgba(168,230,163,0.12)" stroke-width="1"/>';
+    ejeY += '<text x="'+(padLeft-8)+'" y="'+(y+3)+'" text-anchor="end" font-size="9" fill="#5a8a5a">'+fmtEjeY(val)+'</text>';
+  }
+
   var bars = periodos.map(function(p, i) {
-    var x = padSide + i * (barW + gap);
-    var costoH = (p.costo / maxVal) * chartH;
-    var ventaH = (p.venta / maxVal) * chartH;
+    var x = padLeft + i * (barW + gap);
+    var costoH = (p.costo / ejeYMax) * chartH;
+    var ventaH = (p.venta / ejeYMax) * chartH;
     var esPerdida = p.utilidad < 0;
     var rects = '<rect x="'+x+'" y="'+(baseY-costoH)+'" width="'+barW+'" height="'+costoH+'" fill="#ffb74d"/>';
     if (!esPerdida) {
@@ -986,12 +1011,12 @@ function renderGraficaVentas(datos) {
     var label = mostrarLabels
       ? '<text x="'+(x+barW/2)+'" y="'+(topY-6)+'" text-anchor="middle" font-size="10" font-weight="bold" fill="'+(esPerdida?'#ff7070':'#a8e6a3')+'">'+(p.utilidad>=0?'+':'−')+'$'+Math.round(Math.abs(p.utilidad))+'</text>'
       : '';
-    var xLabel = '<text x="'+(x+barW/2)+'" y="'+(baseY+16)+'" text-anchor="middle" font-size="10" fill="#6b9e6b">'+p.label+'</text>';
+    var xLabel = '<text x="'+(x+barW/2)+'" y="'+(baseY+16)+'" text-anchor="middle" font-size="9" fill="#6b9e6b">'+p.label+'</text>';
     var titulo = '<title>'+p.label+' — Venta $'+p.venta.toFixed(0)+' · Costo $'+p.costo.toFixed(0)+' · Utilidad $'+p.utilidad.toFixed(0)+'</title>';
     return '<g>'+titulo+rects+label+xLabel+'</g>';
   }).join("");
 
-  var baseline = '<line x1="0" y1="'+baseY+'" x2="'+svgW+'" y2="'+baseY+'" stroke="rgba(168,230,163,0.2)" stroke-width="1"/>';
+  var baseline = ejeY + '<line x1="'+padLeft+'" y1="'+baseY+'" x2="'+svgW+'" y2="'+baseY+'" stroke="rgba(168,230,163,0.25)" stroke-width="1"/>';
 
   return '<div class="kpi-block">'+
     '<div class="kpi-block-title" style="display:flex;justify-content:space-between;align-items:center">'+

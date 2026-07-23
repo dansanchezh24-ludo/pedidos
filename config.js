@@ -53,7 +53,7 @@ var CATALOGO = [
   // Ludo Mercado — frutas y productos directos (desde 2026-06-30)
   // unidad:"kg" → precio/costo son valores POR KG; piezasPorKg permite convertir a gramos o pieza.
   { id:"limon_persa",  nombre:"Limón persa sin semilla", precio:50,  costo:37, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🍋" },
-  { id:"tuna",         nombre:"Tuna",                     precio:40,  costo:27, unidad:"kg", piezasPorKg:5,  slots:0, emoji:"🌵" },
+  { id:"tuna",         nombre:"Tuna",                     precio:60,  costo:27, unidad:"kg", piezasPorKg:6,  slots:0, emoji:"🌵" },
   { id:"maracuya",     nombre:"Maracuyá",                 precio:100, costo:60, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟠" },
   { id:"rambutan",     nombre:"Rambután",                 precio:90,  costo:50, unidad:"kg", piezasPorKg:30, slots:0, emoji:"🔴" },
   { id:"ciruela_roja", nombre:"Ciruela roja",             precio:70,  costo:31, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟣" },

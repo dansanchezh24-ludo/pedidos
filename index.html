@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pedidos 🫐</title>
-<script src="config.js?v=20260709b"></script>
+<script src="config.js?v=20260730b"></script>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { min-height:100vh; background:linear-gradient(160deg,#0b1a0b 0%,#132613 60%,#0b1a0b 100%); font-family:Georgia,serif; color:#e8f5e8; display:flex; flex-direction:column; align-items:center; padding:24px 16px 40px; }
@@ -42,8 +42,8 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 
 /* ── LUDO MERCADO (conversor kg/gramos/pieza) ── */
 .unit-toggle { display:flex; gap:6px; flex:1; }
-.unit-btn { flex:1; padding:8px 0; background:rgba(255,255,255,0.04); border:1px solid rgba(168,230,163,0.2); border-radius:8px; color:#5a8a5a; font-size:12px; cursor:pointer; font-family:Georgia,serif; text-align:center; }
-.unit-btn.active { background:rgba(76,175,80,0.25); border-color:rgba(168,230,163,0.5); color:#a8e6a3; font-weight:bold; }
+.unit-btn, .preset-btn { flex:1; padding:8px 0; background:rgba(255,255,255,0.04); border:1px solid rgba(168,230,163,0.2); border-radius:8px; color:#5a8a5a; font-size:12px; cursor:pointer; font-family:Georgia,serif; text-align:center; }
+.unit-btn.active, .preset-btn.active { background:rgba(76,175,80,0.25); border-color:rgba(168,230,163,0.5); color:#a8e6a3; font-weight:bold; }
 .qty-num { flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(168,230,163,0.2); border-radius:10px; color:#e8f5e8; font-size:14px; padding:9px 10px; font-family:Georgia,serif; }
 </style>
 </head>
@@ -126,17 +126,14 @@ function getFrutasDisponibles(catId) {
   });
 }
 
-var MERCADO = ["limon_persa","tuna","maracuya","rambutan","ciruela_roja","coco_cafe","pitahaya","cereza","higo","elote_blanco"];
-// Paquetes de Elote Blanco (Duo/3/4/5-Pack): solo precio normal, igual que Ludo
-// Duo/Elotiza/Parrillada/Fiesta no entran a precio familiar (solo el suelto/Select sí).
-var ELOTE_BLANCO_PAQUETES = ["elote_blanco_duo","elote_blanco_3","elote_blanco_4","elote_blanco_5"];
+var MERCADO = ["limon_persa","tuna","maracuya","rambutan","ciruela_roja","jamaica","coco_cafe","pitahaya","cereza","higo","elote_blanco"];
 
 function getCatalogoDisponible() {
   if (precioFamiliar) {
     var IDS = ["zarzamora","frambuesa","blueberry","fresa","cherry_rojo","cherry_amarillo","tomate_kumato","elote_antojo"].concat(MERCADO);
     return CATALOGO.filter(function(c){ return IDS.indexOf(c.id) !== -1; });
   }
-  var ACTIVOS = ["ludo_select","fam_1","ludo_pack","ludo_mix","ludo_berry_max","fresa","fresa_2","fresa_3","cherry_rojo","cherry_amarillo","tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo","elote_parrilla","elote_familiar","elote_reunion","elote_fiesta"].concat(MERCADO).concat(ELOTE_BLANCO_PAQUETES);
+  var ACTIVOS = ["ludo_select","ludo_pack","ludo_mix","ludo_berry_max","fresa","cherry_rojo","cherry_amarillo","tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo"].concat(MERCADO);
   return CATALOGO.filter(function(c){ return ACTIVOS.indexOf(c.id) !== -1; });
 }
 
@@ -146,7 +143,12 @@ var UNIDAD_DEFAULT_CANT = { kg:1, gramos:250, pieza:1 };
 function nuevoItem(catId) {
   var cat = getCat(catId);
   var item = { catId: catId, frutas:[], cantidad:1 };
-  if (cat.unidad === "kg") { item.unidadVenta = "kg"; item.cantidad = UNIDAD_DEFAULT_CANT.kg; }
+  if (cat.presets) {
+    item.unidadVenta = cat.presets[0].unidadVenta;
+    item.cantidad = cat.presets[0].cantidad;
+  } else if (cat.unidad === "kg") {
+    item.unidadVenta = "kg"; item.cantidad = UNIDAD_DEFAULT_CANT.kg;
+  }
   return item;
 }
 
@@ -280,13 +282,31 @@ function renderItems() {
       '<select class="sel-prod" data-i="'+i+'">'+opts+'</select>'+
       (items.length>1?'<button class="del-btn" data-i="'+i+'">×</button>':'');
     div.appendChild(row1);
-    if (cat.unidad === "kg") {
+    if (cat.presets) {
+      var presetRow = document.createElement("div");
+      presetRow.className = "row";
+      presetRow.innerHTML = '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px;min-width:52px">BOLSA</span>';
+      var presetToggle = document.createElement("div");
+      presetToggle.className = "unit-toggle";
+      cat.presets.forEach(function(p, pi){
+        var b = document.createElement("button");
+        var isActive = item.unidadVenta === p.unidadVenta && item.cantidad === p.cantidad;
+        b.className = "preset-btn"+(isActive?" active":"");
+        b.textContent = p.label;
+        b.dataset.i = i; b.dataset.preset = pi;
+        presetToggle.appendChild(b);
+      });
+      presetRow.appendChild(presetToggle);
+      div.appendChild(presetRow);
+    } else if (cat.unidad === "kg") {
       var unidadRow = document.createElement("div");
       unidadRow.className = "row";
       unidadRow.innerHTML = '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px;min-width:52px">UNIDAD</span>';
       var toggle = document.createElement("div");
       toggle.className = "unit-toggle";
-      [["kg","Kg"],["gramos","Gramos"],["pieza","Pieza"]].forEach(function(u){
+      [["kg","Kg"],["gramos","Gramos"],["pieza","Pieza"]].filter(function(u){
+        return u[0] !== "pieza" || cat.piezasPorKg;
+      }).forEach(function(u){
         var b = document.createElement("button");
         b.className = "unit-btn"+((item.unidadVenta||"kg")===u[0]?" active":"");
         b.textContent = u[1];
@@ -319,7 +339,9 @@ function renderItems() {
     var rowQ = document.createElement("div");
     rowQ.className = "row";
     var precioLinea = calcularPrecioLinea(cat, item);
-    if (cat.unidad === "kg" && item.unidadVenta !== "pieza") {
+    if (cat.presets) {
+      rowQ.innerHTML = '<span style="margin-left:auto;color:#a8e6a3;font-weight:bold;font-size:15px">$'+fmtMoney(precioLinea)+'</span>';
+    } else if (cat.unidad === "kg" && item.unidadVenta !== "pieza") {
       var esGramos = item.unidadVenta === "gramos";
       rowQ.innerHTML =
         '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px">'+(esGramos?"GR.":"KG")+'</span>'+
@@ -351,6 +373,15 @@ function renderItems() {
       var i=+this.dataset.i, u=this.dataset.u;
       items[i].unidadVenta = u;
       items[i].cantidad = UNIDAD_DEFAULT_CANT[u];
+      renderItems();
+    });
+  });
+  container.querySelectorAll(".preset-btn").forEach(function(el){
+    el.addEventListener("click", function(){
+      var i=+this.dataset.i;
+      var p = getCat(items[i].catId).presets[+this.dataset.preset];
+      items[i].unidadVenta = p.unidadVenta;
+      items[i].cantidad = p.cantidad;
       renderItems();
     });
   });

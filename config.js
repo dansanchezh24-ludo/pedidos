@@ -57,6 +57,10 @@ var CATALOGO = [
   { id:"maracuya",     nombre:"Maracuyá",                 precio:100, costo:60, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟠" },
   { id:"rambutan",     nombre:"Rambután",                 precio:90,  costo:50, unidad:"kg", piezasPorKg:30, slots:0, emoji:"🔴" },
   { id:"ciruela_roja", nombre:"Ciruela roja",             precio:70,  costo:31, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟣" },
+  // Jamaica — se vende empaquetada en bolsa, solo en 3 presentaciones fijas
+  // (kg / 500 g / 250 g), no en cantidad libre como el resto de Ludo Mercado.
+  { id:"jamaica",      nombre:"Jamaica",                  precio:250, costo:110, unidad:"kg", slots:0, emoji:"🌺",
+    presets:[ {cantidad:1,unidadVenta:"kg",label:"1 kg"}, {cantidad:500,unidadVenta:"gramos",label:"500 g"}, {cantidad:250,unidadVenta:"gramos",label:"250 g"} ] },
   // Piezas fijas — el costo ya viene convertido de $/kg a $/pieza (costo familiar ÷ piezas por kg)
   { id:"coco_cafe",    nombre:"Coco (café)", precio:60,  costo:40, slots:0, emoji:"🥥" },
   { id:"pitahaya",     nombre:"Pitahaya",    precio:100, costo:76, slots:0, emoji:"🐉" },
@@ -99,6 +103,7 @@ var HIST_COSTO_PROVEEDOR_KG = {
   "Maracuyá":                 [ {desde:"2026-06-30", costo:60} ],
   "Rambután":                 [ {desde:"2026-06-30", costo:50} ],
   "Ciruela roja":             [ {desde:"2026-06-30", costo:31} ],
+  "Jamaica":                  [ {desde:"2026-07-30", costo:110} ],
 };
 // Productos vendidos por pieza individual, fuera de la familia de elotes.
 var HIST_COSTO_PIEZA = {

@@ -15,80 +15,83 @@ var SABORES_PULPA = ["Avena","Café","Cebada","Ciruela","Crema de coco","Fresa",
 
 var CAJAS_POR_BOTE = 3;
 
+// Ordenado alfabéticamente por "nombre" (A-Z, pedido explícito del usuario
+// 2026-08-05). El orden de este array define el orden en que aparecen los
+// productos en el <select> de index.html (getCatalogoDisponible() filtra por
+// id pero preserva este orden). Al agregar un producto nuevo, insertarlo en
+// su posición alfabética correcta, no al final.
+//
+// Notas de costeo por categoría (ya no agrupadas físicamente, solo referencia):
+// - Frutas sueltas (Zarzamora/Frambuesa/Blueberry/Fresa/Cherry rojo/amarillo/kumato):
+//   venta directa = presentación bote (ver NOMBRE_BOTE_DIRECTO en panel.html).
+// - Paquetes de berries (Ludo Berry Select/3-Pack/Mix/Max, Familiar Nx, Individual Nx):
+//   costo = costo real de 1 bote del proveedor (cubre 1 clamshell suelto o 3
+//   clamshells de la misma fruta, porque el proveedor solo vende bote completo).
+// - Cherry 3-Pack / Cherry Mix: usan FRUTAS_CHERRY vía frutasPermitidas.
+// - Elotes (Select…Fiesta, Elote Blanco*): slots:0, campo `elotes` = piezas por pack.
+// - Ludo Mercado (Limón persa/Tuna/Maracuyá/Rambután/Ciruela roja/Jamaica):
+//   unidad:"kg" → precio/costo son valores POR KG; piezasPorKg convierte a gramos/pieza.
+// - Jamaica: además trae `presets` con precio/costo TOTAL fijo por bolsa
+//   (1kg/500g/250g, NO proporcional al kg — las bolsas chicas tienen mejor
+//   margen por diseño comercial). precioUnitario()/costoUnitario() en index.html
+//   detectan el preset activo y usan estos valores en vez de escalar linealmente
+//   desde cat.precio/cat.costo. El costeo a proveedor (HIST_COSTO_PROVEEDOR_KG)
+//   sigue siendo el $/kg real que se le paga, sin cambios.
+// - Coco (café)/Pitahaya: piezas fijas, costo ya convertido de $/kg a $/pieza.
+// - Cereza/Higo: bote/clamshell fijos, sin selector de unidad.
+// - Concentrado de Pulpas: slots:1 con frutasPermitidas:SABORES_PULPA (20 sabores, A-Z).
 var CATALOGO = [
-  // Frutas sueltas (venta directa = presentación bote, ver NOMBRE_BOTE_DIRECTO en panel.html)
-  { id:"zarzamora",         nombre:"Zarzamora",       precio:120, costo:60, slots:0, emoji:"🫐" },
-  { id:"frambuesa",         nombre:"Frambuesa",       precio:120, costo:70, slots:0, emoji:"🍓" },
-  { id:"blueberry",         nombre:"Blueberry",       precio:120, costo:80, slots:0, emoji:"🫐" },
-  { id:"fresa",             nombre:"Fresa",           precio:80,  costo:60, slots:0, emoji:"🍓" },
-  { id:"cherry_rojo",       nombre:"Cherry rojo",     precio:50,  costo:30, slots:0, emoji:"🍒" },
-  { id:"cherry_amarillo",   nombre:"Cherry amarillo", precio:50,  costo:30, slots:0, emoji:"🍋" },
-  { id:"tomate_kumato",     nombre:"Cherry kumato",   precio:50,  costo:30, slots:0, emoji:"🍅" },
-  // Paquetes de berries (costo = costo real de 1 bote del proveedor: cubre 1 clamshell
-  // suelto o 3 clamshells de la misma fruta, porque el proveedor solo vende bote completo)
-  { id:"ludo_select", nombre:"Ludo Berry Select",   precio:55,  costo:60,  slots:1, emoji:"🌟" },
-  { id:"ludo_pack",   nombre:"Ludo Berry 3-Pack",   precio:150, costo:60,  slots:1, emoji:"📦" },
-  { id:"ludo_mix",    nombre:"Ludo Berry Mix",      precio:160, costo:180, slots:3, emoji:"🌈" },
-  { id:"ludo_berry_max", nombre:"Ludo Berry Max",   precio:230, costo:225, slots:3, emoji:"✨" },
-  { id:"fam_1",       nombre:"Familiar (bote) 1x",   precio:120, costo:50,  slots:1, emoji:"🪣" },
-  { id:"fam_2",       nombre:"Familiar (bote) 2x",   precio:220, costo:100, slots:2, emoji:"🪣" },
-  { id:"fam_3",       nombre:"Familiar (bote) 3x",   precio:320, costo:150, slots:3, emoji:"🪣" },
-  { id:"ind_1",       nombre:"Individual (clamshell) 1x", precio:50,  costo:15, slots:1, emoji:"📦" },
-  { id:"ind_2",       nombre:"Individual (clamshell) 2x", precio:90,  costo:30, slots:2, emoji:"📦" },
-  { id:"ind_3",       nombre:"Individual (clamshell) 3x", precio:130, costo:45, slots:3, emoji:"📦" },
-  // Paquetes fresa
-  { id:"fresa_2", nombre:"Fresa 2-Pack", precio:150, costo:90,  slots:0, emoji:"🍓" },
-  { id:"fresa_3", nombre:"Fresa 3-Pack", precio:210, costo:135, slots:0, emoji:"🍓" },
-  // Paquetes cherry
-  { id:"ludo_tomatizado", nombre:"Cherry 3-Pack", precio:140, costo:60, slots:1, emoji:"🍅", frutasPermitidas: FRUTAS_CHERRY },
-  { id:"ludo_fresh",      nombre:"Cherry Mix",    precio:140, costo:60, slots:3, emoji:"🍒", frutasPermitidas: FRUTAS_CHERRY },
-  // Elotes — paquetes (slots:0, sin selector de fruta; elotes = piezas por pack)
-  { id:"elote_antojo",   nombre:"Elote Select",    precio:100, costo:60,  slots:0, emoji:"🌽", elotes:3  },
-  { id:"elote_parrilla", nombre:"Ludo Duo",        precio:190, costo:100, slots:0, emoji:"🌽", elotes:6  },
-  { id:"elote_familiar", nombre:"Ludo Elotiza",    precio:280, costo:150, slots:0, emoji:"🌽", elotes:9  },
-  { id:"elote_reunion",  nombre:"Ludo Parrillada", precio:360, costo:200, slots:0, emoji:"🌽", elotes:12 },
-  { id:"elote_fiesta",   nombre:"Ludo Fiesta",     precio:440, costo:250, slots:0, emoji:"🌽", elotes:15 },
-  // Elote Blanco — línea nueva (2026-07-08), empaques por pieza (no charolas de 3 como el amarillo)
-  { id:"elote_blanco",      nombre:"Elote Blanco",        precio:60,  costo:40,  slots:0, emoji:"🌽", elotes:1 },
-  { id:"elote_blanco_duo",  nombre:"Elote Blanco Duo",    precio:115, costo:70,  slots:0, emoji:"🌽", elotes:2 },
-  { id:"elote_blanco_3",    nombre:"Elote Blanco 3-Pack", precio:165, costo:100, slots:0, emoji:"🌽", elotes:3 },
-  { id:"elote_blanco_4",    nombre:"Elote Blanco 4-Pack", precio:215, costo:130, slots:0, emoji:"🌽", elotes:4 },
-  { id:"elote_blanco_5",    nombre:"Elote Blanco 5-Pack", precio:265, costo:160, slots:0, emoji:"🌽", elotes:5 },
-  // Ludo Mercado — frutas y productos directos (desde 2026-06-30)
-  // unidad:"kg" → precio/costo son valores POR KG; piezasPorKg permite convertir a gramos o pieza.
-  { id:"limon_persa",  nombre:"Limón persa sin semilla", precio:50,  costo:37, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🍋" },
-  { id:"tuna",         nombre:"Tuna",                     precio:60,  costo:40, unidad:"kg", piezasPorKg:6,  slots:0, emoji:"🌵" },
-  { id:"maracuya",     nombre:"Maracuyá",                 precio:100, costo:60, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟠" },
-  { id:"rambutan",     nombre:"Rambután",                 precio:90,  costo:50, unidad:"kg", piezasPorKg:30, slots:0, emoji:"🔴" },
-  { id:"ciruela_roja", nombre:"Ciruela roja",             precio:70,  costo:31, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟣" },
-  // Jamaica — se vende empaquetada en bolsa, solo en 3 presentaciones fijas
-  // (kg / 500 g / 250 g), no en cantidad libre como el resto de Ludo Mercado.
-  // Cada preset trae su propio precio/costo TOTAL (no proporcional al kg — las
-  // bolsas chicas tienen mejor margen por diseño comercial, no por error de
-  // redondeo): precioUnitario()/costoUnitario() en index.html detectan el
-  // preset activo y usan estos valores en vez de escalar linealmente desde
-  // cat.precio/cat.costo. El costeo a proveedor (HIST_COSTO_PROVEEDOR_KG) sigue
-  // siendo el $/kg real que se le paga, sin cambios.
-  { id:"jamaica",      nombre:"Jamaica",                  precio:250, costo:110, unidad:"kg", slots:0, emoji:"🌺",
+  { id:"blueberry",        nombre:"Blueberry",                    precio:120, costo:80,  slots:0, emoji:"🫐" },
+  { id:"chile_arbol_250",  nombre:"Bolsa Chile árbol 250 gr",      precio:70,  costo:45,  slots:0, emoji:"🌶️" },
+  { id:"ajo_pelado_150",   nombre:"Bote ajo pelado 150 gr",        precio:60,  costo:45,  slots:0, emoji:"🧄" },
+  { id:"huevo_12",         nombre:"Caja 12 huevos rojo orgánico",  precio:90,  costo:70,  slots:0, emoji:"🥚" },
+  { id:"huevo_18",         nombre:"Caja 18 huevos rojo orgánico",  precio:120, costo:100, slots:0, emoji:"🥚" },
+  { id:"cereza",           nombre:"Cereza",                        precio:120, costo:70,  slots:0, emoji:"🍒" },
+  { id:"ludo_tomatizado",  nombre:"Cherry 3-Pack",                 precio:140, costo:60,  slots:1, emoji:"🍅", frutasPermitidas: FRUTAS_CHERRY },
+  { id:"cherry_amarillo",  nombre:"Cherry amarillo",               precio:50,  costo:30,  slots:0, emoji:"🍋" },
+  { id:"tomate_kumato",    nombre:"Cherry kumato",                 precio:50,  costo:30,  slots:0, emoji:"🍅" },
+  { id:"ludo_fresh",       nombre:"Cherry Mix",                    precio:140, costo:60,  slots:3, emoji:"🍒", frutasPermitidas: FRUTAS_CHERRY },
+  { id:"cherry_rojo",      nombre:"Cherry rojo",                   precio:50,  costo:30,  slots:0, emoji:"🍒" },
+  { id:"ciruela_roja",     nombre:"Ciruela roja",                  precio:70,  costo:31,  unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟣" },
+  { id:"coco_cafe",        nombre:"Coco (café)",                   precio:60,  costo:40,  slots:0, emoji:"🥥" },
+  { id:"concentrado_pulpas", nombre:"Concentrado de Pulpas",       precio:200, costo:120, slots:1, emoji:"🧃", frutasPermitidas: SABORES_PULPA },
+  { id:"elote_blanco",     nombre:"Elote Blanco",                  precio:60,  costo:40,  slots:0, emoji:"🌽", elotes:1 },
+  { id:"elote_blanco_3",   nombre:"Elote Blanco 3-Pack",           precio:165, costo:100, slots:0, emoji:"🌽", elotes:3 },
+  { id:"elote_blanco_4",   nombre:"Elote Blanco 4-Pack",           precio:215, costo:130, slots:0, emoji:"🌽", elotes:4 },
+  { id:"elote_blanco_5",   nombre:"Elote Blanco 5-Pack",           precio:265, costo:160, slots:0, emoji:"🌽", elotes:5 },
+  { id:"elote_blanco_duo", nombre:"Elote Blanco Duo",              precio:115, costo:70,  slots:0, emoji:"🌽", elotes:2 },
+  { id:"elote_antojo",     nombre:"Elote Select",                  precio:100, costo:60,  slots:0, emoji:"🌽", elotes:3 },
+  { id:"fam_1",            nombre:"Familiar (bote) 1x",            precio:120, costo:50,  slots:1, emoji:"🪣" },
+  { id:"fam_2",            nombre:"Familiar (bote) 2x",            precio:220, costo:100, slots:2, emoji:"🪣" },
+  { id:"fam_3",            nombre:"Familiar (bote) 3x",            precio:320, costo:150, slots:3, emoji:"🪣" },
+  { id:"frambuesa",        nombre:"Frambuesa",                     precio:120, costo:70,  slots:0, emoji:"🍓" },
+  { id:"fresa",            nombre:"Fresa",                         precio:80,  costo:60,  slots:0, emoji:"🍓" },
+  { id:"fresa_2",          nombre:"Fresa 2-Pack",                  precio:150, costo:90,  slots:0, emoji:"🍓" },
+  { id:"fresa_3",          nombre:"Fresa 3-Pack",                  precio:210, costo:135, slots:0, emoji:"🍓" },
+  { id:"higo",             nombre:"Higo",                          precio:100, costo:60,  slots:0, emoji:"🟤" },
+  { id:"ind_1",            nombre:"Individual (clamshell) 1x",     precio:50,  costo:15,  slots:1, emoji:"📦" },
+  { id:"ind_2",            nombre:"Individual (clamshell) 2x",     precio:90,  costo:30,  slots:2, emoji:"📦" },
+  { id:"ind_3",            nombre:"Individual (clamshell) 3x",     precio:130, costo:45,  slots:3, emoji:"📦" },
+  { id:"jamaica",          nombre:"Jamaica",                       precio:250, costo:110, unidad:"kg", slots:0, emoji:"🌺",
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg",  precio:250, costo:110},
       {cantidad:500,unidadVenta:"gramos", label:"500 g", precio:150, costo:60},
       {cantidad:250,unidadVenta:"gramos", label:"250 g", precio:80,  costo:40}
     ] },
-  // Piezas fijas — el costo ya viene convertido de $/kg a $/pieza (costo familiar ÷ piezas por kg)
-  { id:"coco_cafe",    nombre:"Coco (café)", precio:60,  costo:40, slots:0, emoji:"🥥" },
-  { id:"pitahaya",     nombre:"Pitahaya",    precio:100, costo:76, slots:0, emoji:"🐉" },
-  // Bote / clamshell fijos
-  { id:"cereza",       nombre:"Cereza", precio:120, costo:70, slots:0, emoji:"🍒" },
-  { id:"higo",         nombre:"Higo",   precio:100, costo:60, slots:0, emoji:"🟤" },
-  // Agregados 2026-08-05: huevo, chile, ajo (paquete fijo, sin selector de fruta/unidad)
-  { id:"huevo_12",         nombre:"Caja 12 huevos rojo orgánico", precio:90,  costo:70, slots:0, emoji:"🥚" },
-  { id:"huevo_18",         nombre:"Caja 18 huevos rojo orgánico", precio:120, costo:100, slots:0, emoji:"🥚" },
-  { id:"chile_arbol_250",  nombre:"Bolsa Chile árbol 250 gr",     precio:70,  costo:45, slots:0, emoji:"🌶️" },
-  { id:"ajo_pelado_150",   nombre:"Bote ajo pelado 150 gr",       precio:60,  costo:45, slots:0, emoji:"🧄" },
-  // Concentrado de Pulpas — 1 sabor a elegir de SABORES_PULPA (slots:1, mismo
-  // patrón que Ludo Berry Select). Ver SABORES_PULPA arriba (orden A-Z).
-  { id:"concentrado_pulpas", nombre:"Concentrado de Pulpas", precio:200, costo:120, slots:1, emoji:"🧃", frutasPermitidas: SABORES_PULPA },
+  { id:"limon_persa",      nombre:"Limón persa sin semilla",       precio:50,  costo:37,  unidad:"kg", piezasPorKg:10, slots:0, emoji:"🍋" },
+  { id:"ludo_pack",        nombre:"Ludo Berry 3-Pack",             precio:150, costo:60,  slots:1, emoji:"📦" },
+  { id:"ludo_berry_max",   nombre:"Ludo Berry Max",                precio:230, costo:225, slots:3, emoji:"✨" },
+  { id:"ludo_mix",         nombre:"Ludo Berry Mix",                precio:160, costo:180, slots:3, emoji:"🌈" },
+  { id:"ludo_select",      nombre:"Ludo Berry Select",             precio:55,  costo:60,  slots:1, emoji:"🌟" },
+  { id:"elote_parrilla",   nombre:"Ludo Duo",                      precio:190, costo:100, slots:0, emoji:"🌽", elotes:6 },
+  { id:"elote_familiar",   nombre:"Ludo Elotiza",                  precio:280, costo:150, slots:0, emoji:"🌽", elotes:9 },
+  { id:"elote_fiesta",     nombre:"Ludo Fiesta",                   precio:440, costo:250, slots:0, emoji:"🌽", elotes:15 },
+  { id:"elote_reunion",    nombre:"Ludo Parrillada",               precio:360, costo:200, slots:0, emoji:"🌽", elotes:12 },
+  { id:"maracuya",         nombre:"Maracuyá",                      precio:100, costo:60,  unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟠" },
+  { id:"pitahaya",         nombre:"Pitahaya",                      precio:100, costo:76,  slots:0, emoji:"🐉" },
+  { id:"rambutan",         nombre:"Rambután",                      precio:90,  costo:50,  unidad:"kg", piezasPorKg:30, slots:0, emoji:"🔴" },
+  { id:"tuna",             nombre:"Tuna",                          precio:60,  costo:40,  unidad:"kg", piezasPorKg:6,  slots:0, emoji:"🌵" },
+  { id:"zarzamora",        nombre:"Zarzamora",                     precio:120, costo:60,  slots:0, emoji:"🫐" },
 ];
 
 // ── Historial de costos del proveedor ─────────────────────────────────────────

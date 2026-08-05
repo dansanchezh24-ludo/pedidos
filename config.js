@@ -8,6 +8,10 @@
 
 var FRUTAS = ["Zarzamora","Frambuesa","Blueberry"];
 var FRUTAS_CHERRY = ["Cherry rojo","Cherry amarillo","Cherry kumato"];
+// Sabores de Concentrado de Pulpas — orden alfabético A-Z (pedido explícito del usuario).
+var SABORES_PULPA = ["Avena","Café","Cebada","Ciruela","Crema de coco","Fresa","Frutos rojos",
+  "Guayaba","Horchata","Jamaica","Kiwi","Lima","Limón","Mamey","Mandarina","Mango","Maracuyá",
+  "Piña","Sandía","Tamarindo"];
 
 var CAJAS_POR_BOTE = 3;
 
@@ -59,14 +63,32 @@ var CATALOGO = [
   { id:"ciruela_roja", nombre:"Ciruela roja",             precio:70,  costo:31, unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟣" },
   // Jamaica — se vende empaquetada en bolsa, solo en 3 presentaciones fijas
   // (kg / 500 g / 250 g), no en cantidad libre como el resto de Ludo Mercado.
+  // Cada preset trae su propio precio/costo TOTAL (no proporcional al kg — las
+  // bolsas chicas tienen mejor margen por diseño comercial, no por error de
+  // redondeo): precioUnitario()/costoUnitario() en index.html detectan el
+  // preset activo y usan estos valores en vez de escalar linealmente desde
+  // cat.precio/cat.costo. El costeo a proveedor (HIST_COSTO_PROVEEDOR_KG) sigue
+  // siendo el $/kg real que se le paga, sin cambios.
   { id:"jamaica",      nombre:"Jamaica",                  precio:250, costo:110, unidad:"kg", slots:0, emoji:"🌺",
-    presets:[ {cantidad:1,unidadVenta:"kg",label:"1 kg"}, {cantidad:500,unidadVenta:"gramos",label:"500 g"}, {cantidad:250,unidadVenta:"gramos",label:"250 g"} ] },
+    presets:[
+      {cantidad:1,  unidadVenta:"kg",     label:"1 kg",  precio:250, costo:110},
+      {cantidad:500,unidadVenta:"gramos", label:"500 g", precio:150, costo:60},
+      {cantidad:250,unidadVenta:"gramos", label:"250 g", precio:80,  costo:40}
+    ] },
   // Piezas fijas — el costo ya viene convertido de $/kg a $/pieza (costo familiar ÷ piezas por kg)
   { id:"coco_cafe",    nombre:"Coco (café)", precio:60,  costo:40, slots:0, emoji:"🥥" },
   { id:"pitahaya",     nombre:"Pitahaya",    precio:100, costo:76, slots:0, emoji:"🐉" },
   // Bote / clamshell fijos
   { id:"cereza",       nombre:"Cereza", precio:120, costo:70, slots:0, emoji:"🍒" },
   { id:"higo",         nombre:"Higo",   precio:100, costo:60, slots:0, emoji:"🟤" },
+  // Agregados 2026-08-05: huevo, chile, ajo (paquete fijo, sin selector de fruta/unidad)
+  { id:"huevo_12",         nombre:"Caja 12 huevos rojo orgánico", precio:90,  costo:70, slots:0, emoji:"🥚" },
+  { id:"huevo_18",         nombre:"Caja 18 huevos rojo orgánico", precio:120, costo:100, slots:0, emoji:"🥚" },
+  { id:"chile_arbol_250",  nombre:"Bolsa Chile árbol 250 gr",     precio:70,  costo:45, slots:0, emoji:"🌶️" },
+  { id:"ajo_pelado_150",   nombre:"Bote ajo pelado 150 gr",       precio:60,  costo:45, slots:0, emoji:"🧄" },
+  // Concentrado de Pulpas — 1 sabor a elegir de SABORES_PULPA (slots:1, mismo
+  // patrón que Ludo Berry Select). Ver SABORES_PULPA arriba (orden A-Z).
+  { id:"concentrado_pulpas", nombre:"Concentrado de Pulpas", precio:200, costo:120, slots:1, emoji:"🧃", frutasPermitidas: SABORES_PULPA },
 ];
 
 // ── Historial de costos del proveedor ─────────────────────────────────────────

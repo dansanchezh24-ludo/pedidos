@@ -10,8 +10,8 @@ var FRUTAS = ["Zarzamora","Frambuesa","Blueberry"];
 var FRUTAS_CHERRY = ["Cherry rojo","Cherry amarillo","Cherry kumato"];
 // Sabores de Concentrado de Pulpas — orden alfabético A-Z (pedido explícito del usuario).
 var SABORES_PULPA = ["Avena","Café","Cebada","Ciruela","Crema de coco","Fresa","Frutos rojos",
-  "Guayaba","Horchata","Jamaica","Kiwi","Lima","Limón","Mamey","Mandarina","Mango","Maracuyá",
-  "Piña","Sandía","Tamarindo"];
+  "Guanábana","Guayaba","Horchata","Jamaica","Kiwi","Lima","Limón","Mamey","Mandarina","Mango",
+  "Maracuyá","Piña","Sandía","Tamarindo"];
 
 var CAJAS_POR_BOTE = 3;
 

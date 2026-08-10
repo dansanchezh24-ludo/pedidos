@@ -135,6 +135,15 @@ var HIST_COSTO_PIEZA = {
   "Coco (café)": [ {desde:"2026-06-30", costo:40} ],
   "Pitahaya":    [ {desde:"2026-06-30", costo:36.67}, {desde:"2026-07-08", costo:76} ],
 };
+// Huevo — costo por caja vendida (12 o 18 piezas). Se agrupan bajo categoría "Huevo".
+var HIST_COSTO_HUEVO = {
+  "Caja 12 huevos rojo orgánico": [ {desde:"2026-08-05", costo:70} ],
+  "Caja 18 huevos rojo orgánico": [ {desde:"2026-08-05", costo:100} ],
+};
+// Concentrado de Pulpas — costo fijo por unidad, igual sin importar el sabor elegido.
+var HIST_COSTO_PULPA = {
+  "Concentrado de Pulpas": [ {desde:"2026-08-05", costo:120} ],
+};
 // Elotes — costo por unidad pedida.
 // Elote amarillo/blanco (nombres viejos, ya no orderables): por pieza individual, congelados.
 // Elote Select…Fiesta / Elote Blanco*: por pack (costo total del pack, no por elote).

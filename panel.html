@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel 🫐</title>
-<script src="config.js?v=20260810"></script>
+<script src="config.js?v=20260810b"></script>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { min-height:100vh; background:linear-gradient(160deg,#0b1a0b 0%,#132613 60%,#0b1a0b 100%); font-family:Georgia,serif; color:#e8f5e8; display:flex; flex-direction:column; align-items:center; padding:24px 16px 40px; }
@@ -359,6 +359,8 @@ function calcularCostoPorFruta(datos) {
     Object.keys(c.elotes).forEach(function(en){ suma(ELOTE_FRUTA[en] || en, c.elotes[en].costoTotal); });
     Object.keys(c.piezas).forEach(function(pn){ suma(pn, c.piezas[pn].costoTotal); });
     Object.keys(c.mercadoKg).forEach(function(mn){ suma(mn, c.mercadoKg[mn].costoTotal); });
+    Object.keys(c.huevos).forEach(function(hn){ suma("Huevo", c.huevos[hn].costoTotal); });
+    Object.keys(c.pulpas).forEach(function(sn){ suma("Pulpas", c.pulpas[sn].costoTotal); });
     Object.keys(c.otros).forEach(function(pn){ suma("(sin categoría)", c.otros[pn].costoTotal); });
   });
   return costoPorFruta;
@@ -496,6 +498,16 @@ function filasVenta(r) {
     return frutasF.map(function(fn){
       return { fruta:fn, nombreComercial:nomF, presentacion:"bote", cantidad:qty, importe:importeF, mes:mes, costo:null, cajas:qty*CAJAS_POR_BOTE };
     });
+  }
+  if (p.tipo === "huevo") {
+    var hn2 = p.frutas[0];
+    var costoHuevo = qty * costoVigente(HIST_COSTO_HUEVO[hn2], fecha).costo;
+    return [{ fruta:"Huevo", nombreComercial:hn2, presentacion:"caja", cantidad:qty, importe:importeTotal, mes:mes, costo: costoHuevo }];
+  }
+  if (p.tipo === "pulpa") {
+    var sn2 = p.frutas[0];
+    var costoPulpa = qty * costoVigente(HIST_COSTO_PULPA["Concentrado de Pulpas"], fecha).costo;
+    return [{ fruta:"Pulpas", nombreComercial:sn2, presentacion:"concentrado", cantidad:qty, importe:importeTotal, mes:mes, costo: costoPulpa }];
   }
   return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", cantidad:qty, importe:importeTotal, mes:mes, costo: parseFloat(r[7])||0 }];
 }
@@ -1250,6 +1262,13 @@ function parsearProducto(nombreRaw, cantidad) {
     if (partes.length > 1) {
       frutas = partes[1].trim().split("+").map(function(f){ return normalizarFruta(f.trim()); });
     }
+  } else if (HIST_COSTO_HUEVO.hasOwnProperty(nombreRaw)) {
+    tipo = "huevo";
+    frutas = [nombreRaw];
+  } else if (nombreRaw.indexOf("Concentrado de Pulpas") !== -1) {
+    tipo = "pulpa";
+    var partesPulpa = nombreRaw.split("·");
+    frutas = [partesPulpa.length > 1 ? partesPulpa[1].trim() : "(sin sabor)"];
   } else if (HIST_COSTO_ELOTE.hasOwnProperty(normalizarProducto(nombreRaw))) {
     // "Ludo Antojo" es el nombre viejo de "Elote Select" — se normaliza para
     // costearse y agruparse junto con las ventas actuales del mismo producto.
@@ -1291,6 +1310,8 @@ function calcularCompraProveedor(datos, fecha) {
   var elotes  = {};
   var piezasDirectas = {};
   var mercadoKg = {};
+  var huevos = {};
+  var pulpas = {};
   var otros = {}; // cualquier producto que no encaje en las categorías de arriba
   var ventaTotal = 0;
 
@@ -1368,6 +1389,18 @@ function calcularCompraProveedor(datos, fecha) {
         berries[fn].cajasF += cajasAporte;
         berries[fn].clientes.push({ nombre: cliente, cajasF: cajasAporte, cajasC: 0 });
       });
+
+    } else if (p.tipo === "huevo") {
+      var hn = p.frutas[0];
+      if (!huevos[hn]) huevos[hn] = { unidades:0, clientes:[] };
+      huevos[hn].unidades += qty;
+      huevos[hn].clientes.push({ nombre: cliente, unidades: qty });
+
+    } else if (p.tipo === "pulpa") {
+      var sn = p.frutas[0];
+      if (!pulpas[sn]) pulpas[sn] = { unidades:0, clientes:[] };
+      pulpas[sn].unidades += qty;
+      pulpas[sn].clientes.push({ nombre: cliente, unidades: qty });
     }
   });
 
@@ -1514,6 +1547,44 @@ function calcularCompraProveedor(datos, fecha) {
     };
   });
 
+  var huevosResult = {};
+  var costoTotalHuevos = 0;
+  Object.keys(huevos).forEach(function(hn) {
+    var unidades = huevos[hn].unidades;
+    var vigH = costoVigente(HIST_COSTO_HUEVO[hn], fecha);
+    var costoU = vigH.costo || 0;
+    var costoT = unidades * costoU;
+    costoTotalHuevos += costoT;
+    var cMap = {};
+    huevos[hn].clientes.forEach(function(c){ cMap[c.nombre]=(cMap[c.nombre]||0)+c.unidades; });
+    huevosResult[hn] = {
+      unidades: unidades,
+      costoUnitario: costoU,
+      costoVigenteDesde: vigH.desde,
+      costoTotal: +costoT.toFixed(2),
+      clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], unidades:e[1]}; })
+    };
+  });
+
+  var pulpasResult = {};
+  var costoTotalPulpas = 0;
+  var vigPulpa = costoVigente(HIST_COSTO_PULPA["Concentrado de Pulpas"], fecha);
+  Object.keys(pulpas).forEach(function(sn) {
+    var unidades = pulpas[sn].unidades;
+    var costoU = vigPulpa.costo || 0;
+    var costoT = unidades * costoU;
+    costoTotalPulpas += costoT;
+    var cMap = {};
+    pulpas[sn].clientes.forEach(function(c){ cMap[c.nombre]=(cMap[c.nombre]||0)+c.unidades; });
+    pulpasResult[sn] = {
+      unidades: unidades,
+      costoUnitario: costoU,
+      costoVigenteDesde: vigPulpa.desde,
+      costoTotal: +costoT.toFixed(2),
+      clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], unidades:e[1]}; })
+    };
+  });
+
   var otrosResult = {};
   var costoTotalOtros = 0;
   Object.keys(otros).forEach(function(pn) {
@@ -1529,7 +1600,7 @@ function calcularCompraProveedor(datos, fecha) {
     };
   });
 
-  var costoTotalProveedor = costoTotalBerries + costoTotalElotes + costoTotalPiezas + costoTotalMercado + costoTotalOtros;
+  var costoTotalProveedor = costoTotalBerries + costoTotalElotes + costoTotalPiezas + costoTotalMercado + costoTotalHuevos + costoTotalPulpas + costoTotalOtros;
   var gananciaNeta = ventaTotal - costoTotalProveedor;
 
   return {
@@ -1537,6 +1608,8 @@ function calcularCompraProveedor(datos, fecha) {
     elotes: elotesResult,
     piezas: piezasResult,
     mercadoKg: mercadoKgResult,
+    huevos: huevosResult,
+    pulpas: pulpasResult,
     otros: otrosResult,
     ludoBerryMax: ludoBerryMaxResult,
     ventaTotal: ventaTotal,
@@ -1568,7 +1641,7 @@ function renderProveedor() {
   }
 
   var calc = calcularCompraProveedor(datos, filtro);
-  var B = calc.berries, E = calc.elotes, P = calc.piezas, M = calc.mercadoKg, O = calc.otros, MAX = calc.ludoBerryMax;
+  var B = calc.berries, E = calc.elotes, P = calc.piezas, M = calc.mercadoKg, H = calc.huevos, PU = calc.pulpas, O = calc.otros, MAX = calc.ludoBerryMax;
 
   // ── Resumen superior ──
   var gnClass = calc.gananciaNeta < 0 ? "rojo" : "";
@@ -1764,6 +1837,60 @@ function renderProveedor() {
     container.appendChild(mcard);
   }
 
+  // ── Tarjeta Huevo (Caja 12 / Caja 18) ──
+  if (Object.keys(H).length > 0) {
+    var hcard = document.createElement("div");
+    hcard.className = "elote-card";
+    var htotal = Object.values(H).reduce(function(s,h){return s+h.costoTotal;},0);
+    hcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🥚 Huevo</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+htotal.toFixed(0)+'</span></div>';
+    Object.keys(H).sort().forEach(function(hn){
+      var h = H[hn];
+      var hrow = document.createElement("div");
+      hrow.className = "elote-row";
+      hrow.innerHTML =
+        '<div>'+
+          '<div style="color:#e8f5e8">🥚 '+hn+'</div>'+
+          '<div style="color:#6b9e6b;font-size:11px;margin-top:3px">'+
+            h.clienteDetalle.map(function(cd){return cd.nombre+': '+cd.unidades;}).join(' · ')+
+          '</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="color:#ffcc02;font-weight:bold">'+h.unidades+' × $'+h.costoUnitario+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+h.costoTotal.toFixed(2)+'</div>'+
+          '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+h.costoVigenteDesde+'</div>'+
+        '</div>';
+      hcard.appendChild(hrow);
+    });
+    container.appendChild(hcard);
+  }
+
+  // ── Tarjeta Pulpas (Concentrado de Pulpas, desglosado por sabor) ──
+  if (Object.keys(PU).length > 0) {
+    var pucard = document.createElement("div");
+    pucard.className = "elote-card";
+    var putotal = Object.values(PU).reduce(function(s,pu){return s+pu.costoTotal;},0);
+    pucard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🧃 Pulpas</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+putotal.toFixed(0)+'</span></div>';
+    Object.keys(PU).sort().forEach(function(sn){
+      var pu = PU[sn];
+      var purow = document.createElement("div");
+      purow.className = "elote-row";
+      purow.innerHTML =
+        '<div>'+
+          '<div style="color:#e8f5e8">🧃 '+sn+'</div>'+
+          '<div style="color:#6b9e6b;font-size:11px;margin-top:3px">'+
+            pu.clienteDetalle.map(function(cd){return cd.nombre+': '+cd.unidades;}).join(' · ')+
+          '</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="color:#ffcc02;font-weight:bold">'+pu.unidades+' × $'+pu.costoUnitario+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+pu.costoTotal.toFixed(2)+'</div>'+
+          '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+pu.costoVigenteDesde+'</div>'+
+        '</div>';
+      pucard.appendChild(purow);
+    });
+    container.appendChild(pucard);
+  }
+
   // ── Tarjeta "Otros" (productos sin categoría específica, ej. paquetes o combos
   //     no reconocidos por nombre — usa el costo ya guardado en cada pedido) ──
   if (Object.keys(O).length > 0) {
@@ -1822,6 +1949,14 @@ function renderProveedor() {
     var m = M[mn];
     lineas.push(mn+": "+m.kgNecesarios+" kg — $"+m.costoTotal.toFixed(2));
   });
+  Object.keys(H).sort().forEach(function(hn){
+    var h = H[hn];
+    lineas.push(hn+": "+h.unidades+" — $"+h.costoTotal.toFixed(2));
+  });
+  Object.keys(PU).sort().forEach(function(sn){
+    var pu = PU[sn];
+    lineas.push("Concentrado de Pulpas ("+sn+"): "+pu.unidades+" — $"+pu.costoTotal.toFixed(2));
+  });
   Object.keys(O).sort().forEach(function(pn){
     var o = O[pn];
     lineas.push(pn+": "+o.unidades+" — $"+o.costoTotal.toFixed(2));
@@ -1875,6 +2010,20 @@ function renderProveedor() {
     lineasHTML += '<div class="pedido-line">'+
       '<span class="pedido-fruta">'+emojiDeFruta(mn)+' '+mn+'<span class="pedido-cant">'+m.kgNecesarios+' kg</span></span>'+
       '<span class="pedido-costo">$'+m.costoTotal.toFixed(2)+'</span>'+
+    '</div>';
+  });
+  Object.keys(H).sort().forEach(function(hn){
+    var h = H[hn];
+    lineasHTML += '<div class="pedido-line">'+
+      '<span class="pedido-fruta">🥚 '+hn+'<span class="pedido-cant">'+h.unidades+'</span></span>'+
+      '<span class="pedido-costo">$'+h.costoTotal.toFixed(2)+'</span>'+
+    '</div>';
+  });
+  Object.keys(PU).sort().forEach(function(sn){
+    var pu = PU[sn];
+    lineasHTML += '<div class="pedido-line">'+
+      '<span class="pedido-fruta">🧃 Concentrado de Pulpas ('+sn+')<span class="pedido-cant">'+pu.unidades+'</span></span>'+
+      '<span class="pedido-costo">$'+pu.costoTotal.toFixed(2)+'</span>'+
     '</div>';
   });
   Object.keys(O).sort().forEach(function(pn){

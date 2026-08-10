@@ -44,6 +44,7 @@ var CATALOGO = [
   { id:"blueberry",        nombre:"Blueberry",                    precio:120, costo:80,  slots:0, emoji:"🫐" },
   { id:"chile_arbol_250",  nombre:"Bolsa Chile árbol 250 gr",      precio:70,  costo:45,  slots:0, emoji:"🌶️" },
   { id:"ajo_pelado_150",   nombre:"Bote ajo pelado 150 gr",        precio:60,  costo:45,  slots:0, emoji:"🧄" },
+  { id:"ajo_pelado_300",   nombre:"Bote ajo pelado 300 gr",        precio:100, costo:65,  slots:0, emoji:"🧄" },
   { id:"huevo_12",         nombre:"Caja 12 huevos rojo orgánico",  precio:90,  costo:70,  slots:0, emoji:"🥚" },
   { id:"huevo_18",         nombre:"Caja 18 huevos rojo orgánico",  precio:120, costo:100, slots:0, emoji:"🥚" },
   { id:"cereza",           nombre:"Cereza",                        precio:120, costo:70,  slots:0, emoji:"🍒" },

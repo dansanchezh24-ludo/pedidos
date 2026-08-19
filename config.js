@@ -142,6 +142,10 @@ var HIST_COSTO_PIEZA = {
   // se costea como pieza propia (el nombre guardado ya trae el sufijo de tamaño).
   "Bote ajo pelado (150 g)": [ {desde:"2026-08-05", costo:45} ],
   "Bote ajo pelado (300 g)": [ {desde:"2026-08-05", costo:65} ],
+  // Nombre viejo, sin paréntesis — usado por pedidos capturados antes de que
+  // ajo tuviera `presets` en CATALOGO (ej. pedido 2026-08-15 de Victoria).
+  // Se deja congelado, nunca agregarle entradas nuevas.
+  "Bote ajo pelado 150 gr": [ {desde:"2026-08-05", costo:45} ],
   "Bolsa Chile árbol 250 gr": [ {desde:"2026-08-05", costo:45} ],
 };
 // Huevo — costo por caja vendida (12 o 18 piezas). Se agrupan bajo categoría "Huevo".

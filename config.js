@@ -138,6 +138,11 @@ var HIST_COSTO_PROVEEDOR_KG = {
 var HIST_COSTO_PIEZA = {
   "Coco (café)": [ {desde:"2026-06-30", costo:40} ],
   "Pitahaya":    [ {desde:"2026-06-30", costo:36.67}, {desde:"2026-07-08", costo:76} ],
+  // Ajo — presets no proporcionales (ver CATALOGO.ajo_pelado.presets), cada bolsa
+  // se costea como pieza propia (el nombre guardado ya trae el sufijo de tamaño).
+  "Bote ajo pelado (150 g)": [ {desde:"2026-08-05", costo:45} ],
+  "Bote ajo pelado (300 g)": [ {desde:"2026-08-05", costo:65} ],
+  "Bolsa Chile árbol 250 gr": [ {desde:"2026-08-05", costo:45} ],
 };
 // Huevo — costo por caja vendida (12 o 18 piezas). Se agrupan bajo categoría "Huevo".
 var HIST_COSTO_HUEVO = {

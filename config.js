@@ -10,8 +10,8 @@ var FRUTAS = ["Zarzamora","Frambuesa","Blueberry"];
 var FRUTAS_CHERRY = ["Cherry rojo","Cherry amarillo","Cherry kumato"];
 // Sabores de Concentrado de Pulpas — orden alfabético A-Z (pedido explícito del usuario).
 var SABORES_PULPA = ["Avena","Café","Cebada","Ciruela","Crema de coco","Fresa","Frutos rojos",
-  "Guanábana","Guayaba","Horchata","Jamaica","Kiwi","Lima","Limón","Mamey","Mandarina","Mango",
-  "Maracuyá","Piña","Sandía","Tamarindo"];
+  "Guanábana","Guayaba","Horchata","Jamaica","Jugo verde (Nopal, apio, piña y jengibre)","Kiwi",
+  "Lima","Limón","Mamey","Mandarina","Mango","Maracuyá","Piña","Sandía","Tamarindo","Zarzamora"];
 
 var CAJAS_POR_BOTE = 3;
 
@@ -43,8 +43,11 @@ var CAJAS_POR_BOTE = 3;
 var CATALOGO = [
   { id:"blueberry",        nombre:"Blueberry",                    precio:120, costo:80,  slots:0, emoji:"🫐" },
   { id:"chile_arbol_250",  nombre:"Bolsa Chile árbol 250 gr",      precio:70,  costo:45,  slots:0, emoji:"🌶️" },
-  { id:"ajo_pelado_150",   nombre:"Bote ajo pelado 150 gr",        precio:60,  costo:45,  slots:0, emoji:"🧄" },
-  { id:"ajo_pelado_300",   nombre:"Bote ajo pelado 300 gr",        precio:100, costo:65,  slots:0, emoji:"🧄" },
+  { id:"ajo_pelado",       nombre:"Bote ajo pelado",               precio:60,  costo:45,  unidad:"kg", slots:0, emoji:"🧄",
+    presets:[
+      {cantidad:150, unidadVenta:"gramos", label:"150 g", precio:60,  costo:45},
+      {cantidad:300, unidadVenta:"gramos", label:"300 g", precio:100, costo:65}
+    ] },
   { id:"huevo_12",         nombre:"Caja 12 huevos rojo orgánico",  precio:90,  costo:70,  slots:0, emoji:"🥚" },
   { id:"huevo_18",         nombre:"Caja 18 huevos rojo orgánico",  precio:120, costo:100, slots:0, emoji:"🥚" },
   { id:"cereza",           nombre:"Cereza",                        precio:120, costo:70,  slots:0, emoji:"🍒" },

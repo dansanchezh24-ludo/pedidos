@@ -27,6 +27,7 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 .clear-btn { background:rgba(255,100,100,0.15); border:1px solid rgba(255,100,100,0.3); border-radius:10px; color:#ff8a80; font-size:13px; padding:10px 14px; cursor:pointer; font-family:Georgia,serif; white-space:nowrap; }
 .refresh-btn { width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:10px; color:#5a8a5a; font-size:13px; padding:8px 0; cursor:pointer; font-family:Georgia,serif; }
 .cliente-table { width:100%; border-collapse:collapse; }
+.cliente-table td { overflow-wrap:break-word; word-break:break-word; }
 .cliente-table th { color:#7ec87a; font-size:10px; letter-spacing:1px; padding:5px 6px; text-align:left; border-bottom:1px solid rgba(168,230,163,0.2); }
 .cliente-table th:last-child { text-align:right; }
 .cliente-row { border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; transition:background 0.15s; }
@@ -1023,6 +1024,16 @@ function renderTablero() {
           '<td style="text-align:right;color:#6b9e6b">—</td>'+
         '</tr>';
         if (abierto) {
+          if (g.porPresentacion.length === 1) {
+            // Un solo sub-grupo (ej. Pulpas siempre "concentrado", Elote
+            // siempre "charola") no separa nada — desplegarlo llevaría a una
+            // fila vacía sin más info que una flecha. Se salta ese nivel y
+            // se muestran los productos vendidos directo.
+            g.rows.forEach(function(f){
+              html += renderFilaDirecta(f.nombreComercial, f, 16, false);
+            });
+            return;
+          }
           g.porPresentacion.forEach(function(sub){
             if (sub.rows.length === 1) {
               var labelDirecta = g.esPaquete ? sub.rows[0].fruta : sub.rows[0].nombreComercial;
@@ -1148,8 +1159,8 @@ function renderTablero() {
   };
 
   html += '<div class="kpi-block"><div class="kpi-block-title">PRODUCTOS ACTUALES — COMPRA VS VENTA</div>';
-  html += '<div style="overflow-x:auto"><table class="cliente-table" style="white-space:nowrap"><thead><tr>'+
-    '<th>PRODUCTO</th><th style="text-align:right">PRECIO COMPRA</th><th style="text-align:right">PRECIO VENTA</th>'+
+  html += '<div style="overflow-x:auto"><table class="cliente-table" style="table-layout:fixed"><thead><tr>'+
+    '<th style="width:50%">PRODUCTO</th><th style="width:25%;text-align:right">PRECIO COMPRA</th><th style="width:25%;text-align:right">PRECIO VENTA</th>'+
   '</tr></thead><tbody>';
   CATALOGO.filter(function(cat){ return PEDIBLES_IDS.indexOf(cat.id) !== -1; }).forEach(function(cat){
     var unidadSuf = cat.unidad === "kg" ? "/kg" : "";

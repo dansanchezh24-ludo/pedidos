@@ -201,6 +201,7 @@ var frutaExpandida = {}; // { fruta: true|false } — expandir/colapsar detalle 
 var presentacionExpandida = {}; // { "fruta||presentacionVendida": true|false } — expandir/colapsar el desglose por producto dentro de una presentación vendida (nivel 2 de "DETALLE DE VENTAS POR PRODUCTO")
 var ordenDetalleVentas = "utilidadDesc"; // "alfabetico" | "ventaDesc" | "ventaAsc" | "utilidadDesc" | "utilidadAsc"
 var vistaDetalleVentas = "clientes"; // "clientes" | "familia" — filtra "DETALLE DE VENTAS POR PRODUCTO" a ventas a precio normal o a precio familiar/costo (ver esVentaFamiliar)
+var ordenProductosActuales = { campo:null, dir:"desc" }; // click en un encabezado de "PRODUCTOS ACTUALES — COMPRA VS VENTA" para ordenar por esa columna
 
 document.getElementById("tabTablero").addEventListener("click",  function(){ switchTab("tablero"); });
 document.getElementById("tabResumen").addEventListener("click",  function(){ switchTab("resumen"); });
@@ -1275,42 +1276,86 @@ function renderTablero() {
   var botesVigentes = FRUTAS.map(costoBoteVigente); // [Zarzamora, Frambuesa, Blueberry]
   var costoMixVigente = botesVigentes.reduce(function(s,c){ return s+c/CAJAS_POR_BOTE; }, 0);
   var costoMaxVigente = costoMixVigente + costoClamshellVigente("Fresa");
-  var costoSelectMin = Math.min.apply(null, botesVigentes) / CAJAS_POR_BOTE;
-  var costoSelectMax = Math.max.apply(null, botesVigentes) / CAJAS_POR_BOTE;
+  // Select y 3-Pack se desglosan por fruta (una fila por Zarzamora/Frambuesa/
+  // Blueberry) en vez de mostrar un rango — ver COSTOS_POR_FRUTA_IDS abajo.
   var COSTO_FORMULA_IDS = {
-    ludo_select: '$'+fmtMoney(costoSelectMin)+' – $'+fmtMoney(costoSelectMax)+' según fruta',
-    ludo_pack:   '$'+fmtMoney(Math.min.apply(null,botesVigentes))+' – $'+fmtMoney(Math.max.apply(null,botesVigentes))+' según fruta',
     ludo_mix:    '$'+fmtMoney(costoMixVigente)+' (Zarzamora+Frambuesa+Blueberry ÷3)',
     ludo_berry_max: '$'+fmtMoney(costoMaxVigente)+' (Mix + Fresa)'
   };
+  // Costo numérico de los 2 paquetes de arriba — para calcular su utilidad,
+  // ya que COSTO_FORMULA_IDS solo trae el texto formateado.
+  var COSTO_NUM_IDS = {
+    ludo_mix:    costoMixVigente,
+    ludo_berry_max: costoMaxVigente
+  };
+  // Select (costo por clamshell = bote de esa fruta ÷3) y 3-Pack (costo por
+  // 3-Pack = 1 bote completo de esa fruta, ya que son 3 clamshells de la
+  // misma) desglosados por cada una de las 3 frutas base.
+  var COSTOS_POR_FRUTA_IDS = {
+    ludo_select: FRUTAS.map(function(fr){ return { fruta:fr, costo: costoBoteVigente(fr)/CAJAS_POR_BOTE }; }),
+    ludo_pack:   FRUTAS.map(function(fr){ return { fruta:fr, costo: costoBoteVigente(fr) }; })
+  };
+  // $ utilidad y % utilidad de una fila.
+  function filaUtilidad(precio, costo) {
+    var util = precio - costo;
+    var pct = precio > 0 ? (util/precio*100) : 0;
+    return { costoTexto: '$'+fmtMoney(costo), costoValor:costo, texto: '$'+fmtMoney(util), utilValor:util, pctTexto: pct.toFixed(0)+'%', pctValor:pct, neg: util<0 };
+  }
 
-  html += '<div class="kpi-block"><div class="kpi-block-title">PRODUCTOS ACTUALES — COMPRA VS VENTA</div>';
-  html += '<div style="overflow-x:auto"><table class="cliente-table" style="table-layout:fixed"><thead><tr>'+
-    '<th style="width:50%">PRODUCTO</th><th style="width:25%;text-align:right">PRECIO COMPRA</th><th style="width:25%;text-align:right">PRECIO VENTA</th>'+
-  '</tr></thead><tbody>';
+  var filasProductosActuales = [];
   CATALOGO.filter(function(cat){ return PEDIBLES_IDS.indexOf(cat.id) !== -1; }).forEach(function(cat){
     var unidadSuf = cat.unidad === "kg" ? "/kg" : "";
-    if (COSTO_FORMULA_IDS[cat.id]) {
-      html += '<tr class="cliente-row" style="cursor:default">'+
-        '<td>'+(cat.emoji||"")+' '+cat.nombre+'</td>'+
-        '<td style="text-align:right;color:#ffb74d">'+COSTO_FORMULA_IDS[cat.id]+'</td>'+
-        '<td style="text-align:right;color:#a8e6a3">$'+fmtMoney(cat.precio)+'</td>'+
-      '</tr>';
+    if (COSTOS_POR_FRUTA_IDS[cat.id]) {
+      COSTOS_POR_FRUTA_IDS[cat.id].forEach(function(cf){
+        var u = filaUtilidad(cat.precio, cf.costo);
+        filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre+' — '+cf.fruta, nombreOrden:cat.nombre+' '+cf.fruta, costoTexto:u.costoTexto, costoValor:u.costoValor, precioTexto:'$'+fmtMoney(cat.precio), precioValor:cat.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
+      });
+    } else if (COSTO_FORMULA_IDS[cat.id]) {
+      var u = filaUtilidad(cat.precio, COSTO_NUM_IDS[cat.id]);
+      filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre, nombreOrden:cat.nombre, costoTexto:COSTO_FORMULA_IDS[cat.id], costoValor:u.costoValor, precioTexto:'$'+fmtMoney(cat.precio), precioValor:cat.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
     } else if (cat.presets && cat.presets.length) {
       cat.presets.forEach(function(pr){
-        html += '<tr class="cliente-row" style="cursor:default">'+
-          '<td>'+(cat.emoji||"")+' '+cat.nombre+' ('+pr.label+')</td>'+
-          '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(pr.costo)+'</td>'+
-          '<td style="text-align:right;color:#a8e6a3">$'+fmtMoney(pr.precio)+'</td>'+
-        '</tr>';
+        var u = filaUtilidad(pr.precio, pr.costo);
+        filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre+' ('+pr.label+')', nombreOrden:cat.nombre+' '+pr.label, costoTexto:u.costoTexto, costoValor:u.costoValor, precioTexto:'$'+fmtMoney(pr.precio), precioValor:pr.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
       });
     } else {
-      html += '<tr class="cliente-row" style="cursor:default">'+
-        '<td>'+(cat.emoji||"")+' '+cat.nombre+'</td>'+
-        '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(cat.costo)+unidadSuf+'</td>'+
-        '<td style="text-align:right;color:#a8e6a3">$'+fmtMoney(cat.precio)+unidadSuf+'</td>'+
-      '</tr>';
+      var u = filaUtilidad(cat.precio, cat.costo);
+      filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre, nombreOrden:cat.nombre, costoTexto:'$'+fmtMoney(cat.costo)+unidadSuf, costoValor:u.costoValor, precioTexto:'$'+fmtMoney(cat.precio)+unidadSuf, precioValor:cat.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
     }
+  });
+  var CAMPOS_ORDEN_PA = { producto:"nombreOrden", compra:"costoValor", venta:"precioValor", util:"utilValor", pct:"pctValor" };
+  if (ordenProductosActuales.campo) {
+    var campoOrden = CAMPOS_ORDEN_PA[ordenProductosActuales.campo];
+    var dirMult = ordenProductosActuales.dir === "desc" ? -1 : 1;
+    filasProductosActuales.sort(function(a,b){
+      if (campoOrden === "nombreOrden") return dirMult * a.nombreOrden.localeCompare(b.nombreOrden);
+      return dirMult * (a[campoOrden] - b[campoOrden]);
+    });
+  }
+  var ANCHOS_ORDEN_PA = { producto:32, compra:17, venta:17, util:19, pct:15 };
+  function thOrdenable(campo, label, alinDer) {
+    var activo = ordenProductosActuales.campo === campo;
+    var flecha = activo ? (ordenProductosActuales.dir === "desc" ? " ▼" : " ▲") : "";
+    return '<th class="th-ordenable" data-campo-orden="'+campo+'" style="width:'+ANCHOS_ORDEN_PA[campo]+'%;cursor:pointer;'+(alinDer?'text-align:right':'')+(activo?';color:#a8e6a3':'')+'">'+label+flecha+'</th>';
+  }
+
+  html += '<div class="kpi-block"><div class="kpi-block-title">PRODUCTOS ACTUALES — COMPRA VS VENTA <span class="cliente-sub" style="font-weight:normal">(toca un encabezado para ordenar)</span></div>';
+  html += '<div style="overflow-x:auto"><table class="cliente-table" style="table-layout:fixed;font-size:12px"><thead><tr>'+
+    thOrdenable("producto","PRODUCTO",false)+
+    thOrdenable("compra","COMPRA",true)+
+    thOrdenable("venta","VENTA",true)+
+    thOrdenable("util","$ UTIL.",true)+
+    thOrdenable("pct","% UTIL.",true)+
+  '</tr></thead><tbody>';
+  filasProductosActuales.forEach(function(f){
+    var colorUtil = f.neg ? '#ff7070' : '#a8e6a3';
+    html += '<tr class="cliente-row" style="cursor:default">'+
+      '<td>'+f.nombre+'</td>'+
+      '<td style="text-align:right;color:#ffb74d">'+f.costoTexto+'</td>'+
+      '<td style="text-align:right;color:#a8e6a3">'+f.precioTexto+'</td>'+
+      '<td style="text-align:right;color:'+colorUtil+'">'+f.utilTexto+'</td>'+
+      '<td style="text-align:right;color:'+colorUtil+'">'+f.pctTexto+'</td>'+
+    '</tr>';
   });
   html += '</tbody></table></div></div>';
 
@@ -1326,6 +1371,20 @@ function renderTablero() {
     btn.addEventListener("click", function(){
       var ubic = this.dataset.ubic;
       casasExpandido[ubic] = !casasExpandido[ubic];
+      renderTablero();
+    });
+  });
+  container.querySelectorAll(".th-ordenable").forEach(function(th){
+    th.addEventListener("click", function(){
+      var campo = this.dataset.campoOrden;
+      if (ordenProductosActuales.campo === campo) {
+        ordenProductosActuales.dir = ordenProductosActuales.dir === "desc" ? "asc" : "desc";
+      } else {
+        // Producto arranca A-Z (ascendente); las columnas numéricas arrancan
+        // de mayor a menor, que es lo más útil para ver primero.
+        ordenProductosActuales.campo = campo;
+        ordenProductosActuales.dir = campo === "producto" ? "asc" : "desc";
+      }
       renderTablero();
     });
   });

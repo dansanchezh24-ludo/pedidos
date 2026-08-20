@@ -409,6 +409,18 @@ var NOMBRE_BOTE_DIRECTO = { "Blueberry":"Bote Blueberry", "Frambuesa":"Bote Fram
 // Elote amarillo y Elote Select son el mismo producto (varió el nombre con el tiempo);
 // todos los elotes (amarillo y blanco) se venden en charola, no por pieza suelta.
 var ELOTE_NOMBRE_COMERCIAL = { "Elote amarillo":"Elote Select", "Elote Select":"Elote Select", "Elote blanco":"Elote blanco" };
+// Productos cuyo nombreComercial es un PAQUETE compartido entre varias
+// frutas (Select/3-Pack/Mix/Max, Familiar Nx) — se usa para saber cuándo el
+// precio de un pedido se repartió entre frutas y hay que re-repartirlo
+// proporcional al costo real (ver calcularTablaVentas). Ojo: no basta con
+// "¿hay más de una fruta bajo este nombreComercial?" — nombreComercial de
+// Concentrado de Pulpas es el SABOR (ej. "Fresa", "Maracuyá"), que puede
+// coincidir por nombre con una fruta suelta de otra categoría sin ser el
+// mismo producto ni deber mezclarse con ella.
+var PRODUCTOS_MULTIFRUTA = ["Ludo Berry 3-Pack","Ludo Berry Select","Ludo Berry Mix","Ludo Berry Max"];
+function esNombreFamiliar(nombreComercial) {
+  return nombreComercial.indexOf("Familiar (bote)") === 0;
+}
 
 /**
  * Extrae de una fila de Sheets un arreglo de {fruta, nombreComercial, presentacion,
@@ -588,10 +600,8 @@ function calcularTablaVentas(datos) {
     (porNombreComercial[f.nombreComercial] = porNombreComercial[f.nombreComercial] || []).push(f);
   });
   Object.keys(porNombreComercial).forEach(function(nombre){
+    if (PRODUCTOS_MULTIFRUTA.indexOf(nombre) === -1 && !esNombreFamiliar(nombre)) return;
     var filasProd = porNombreComercial[nombre];
-    var frutasDistintas = {};
-    filasProd.forEach(function(f){ frutasDistintas[f.fruta] = 1; });
-    if (Object.keys(frutasDistintas).length < 2) return;
     var totalImporte = filasProd.reduce(function(s,f){ return s+f.importe; }, 0);
     var totalCosto = filasProd.reduce(function(s,f){ return s+f.costo; }, 0);
     if (totalCosto <= 0) return;
@@ -845,7 +855,7 @@ function renderTablero() {
     var factor = (f.presentacionComprada === f.presentacion) ? 1 : CAJAS_POR_BOTE;
     return f.costoUnitarioNominal / factor;
   }
-  var GRUPOS_PAQUETE_BERRIES = ["Ludo Berry 3-Pack","Ludo Berry Select","Ludo Berry Mix","Ludo Berry Max"];
+  var GRUPOS_PAQUETE_BERRIES = PRODUCTOS_MULTIFRUTA;
   var tablaCompleta = calcularTablaVentas(datos);
   // Ludo Berry Select/3-Pack/Mix/Max: el precio de un pedido se reparte
   // PAREJO entre sus frutas (ej. Max ÷4), pero cada fruta cuesta distinto

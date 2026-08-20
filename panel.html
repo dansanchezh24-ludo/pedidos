@@ -833,13 +833,42 @@ function renderTablero() {
     if (inicioOperaciones && f.costoVigenteDesde < inicioOperaciones) return inicioOperaciones;
     return f.costoVigenteDesde;
   }
+  // Los paquetes de berries (Select/3-Pack/Mix/Max) y el bote directo
+  // (Bote Blueberry/Zarzamora/Frambuesa, Familiar) se agrupan por PRODUCTO
+  // en vez de por fruta — porque estos 4 paquetes pueden llevar cualquiera
+  // de las 3 frutas base (o las 4 en el caso de Mix/Max), así que verlos
+  // bajo cada fruta por separado no responde "¿cómo va el Select?" sino que
+  // lo fragmenta en 3 pedazos. Aquí se ve el producto completo y, adentro,
+  // se desglosa por fruta. El resto de las frutas (Fresa suelta, Cereza,
+  // Higo, Cherry, Elote, Pulpas, Mercado) conserva el agrupado por fruta de
+  // siempre — Fresa suelta es distinta de Fresa-dentro-de-Max, así que
+  // conservan agrupados separados.
+  var GRUPOS_PAQUETE_BERRIES = ["Ludo Berry 3-Pack","Ludo Berry Select","Ludo Berry Mix","Ludo Berry Max"];
+  var GRUPO_BOTE_DIRECTO = "Vendido en bote";
+  function esGrupoPaquete(nombreGrupo) {
+    return GRUPOS_PAQUETE_BERRIES.indexOf(nombreGrupo) !== -1 || nombreGrupo === GRUPO_BOTE_DIRECTO;
+  }
+  function grupoDeFila(f) {
+    if (GRUPOS_PAQUETE_BERRIES.indexOf(f.nombreComercial) !== -1) return f.nombreComercial;
+    if (f.presentacion === "bote" && FRUTAS.indexOf(f.fruta) !== -1) return GRUPO_BOTE_DIRECTO;
+    return f.fruta;
+  }
+  // Unidad de venta (bote/clamshell/kg/gr/pza) de un conjunto de filas — si
+  // todas comparten la misma, se muestra; si varía dentro del grupo, "—".
+  function unidadDeFilas(rows) {
+    var s = {};
+    rows.forEach(function(r){ s[r.presentacion] = 1; });
+    var keys = Object.keys(s);
+    return keys.length === 1 ? keys[0] : "—";
+  }
   if (tabla.length) {
     var gruposPorFruta = {};
     tabla.forEach(function(f){
-      if (!gruposPorFruta[f.fruta]) gruposPorFruta[f.fruta] = { fruta:f.fruta, rows:[], importe:0, costo:0 };
-      gruposPorFruta[f.fruta].rows.push(f);
-      gruposPorFruta[f.fruta].importe += f.importe;
-      gruposPorFruta[f.fruta].costo += f.costo;
+      var gk = grupoDeFila(f);
+      if (!gruposPorFruta[gk]) gruposPorFruta[gk] = { fruta:gk, rows:[], importe:0, costo:0 };
+      gruposPorFruta[gk].rows.push(f);
+      gruposPorFruta[gk].importe += f.importe;
+      gruposPorFruta[gk].costo += f.costo;
     });
     // Cuenta tramos de costo distintos entre un conjunto de filas — si hay más
     // de uno, se muestra la fecha de vigencia en el detalle para dejar claro
@@ -868,23 +897,34 @@ function renderTablero() {
       // el producto que más ganancia dejó va primero, sin importar tramo de
       // costo o precio.
       g.rows.sort(function(a,b){ return (b.importe-b.costo) - (a.importe-a.costo); });
-      g.numProductosUnicos = Object.keys(g.rows.reduce(function(s,f){ s[f.nombreComercial+"||"+f.presentacion]=1; return s; }, {})).length;
-      // Nivel 2: agrupa por presentación VENDIDA (bote suelto vs clamshell en
-      // paquetes, etc.) — el mismo bote comprado puede terminar repartido
-      // entre varias presentaciones de venta distintas.
-      var porPres = {};
+      var esPaquete = esGrupoPaquete(g.fruta);
+      g.esPaquete = esPaquete;
+      g.unidad = unidadDeFilas(g.rows);
+      g.numProductosUnicos = esPaquete
+        ? Object.keys(g.rows.reduce(function(s,f){ s[f.fruta]=1; return s; }, {})).length
+        : Object.keys(g.rows.reduce(function(s,f){ s[f.nombreComercial+"||"+f.presentacion]=1; return s; }, {})).length;
+      // Nivel 2: para los grupos-paquete, desglosa por FRUTA (qué fruta se
+      // vendió dentro de ese producto). Para el resto, sigue agrupando por
+      // presentación VENDIDA (bote suelto vs clamshell en paquetes, etc.) —
+      // el mismo bote comprado puede terminar repartido entre varias
+      // presentaciones de venta distintas.
+      var porSub = {};
       g.rows.forEach(function(f){
-        if (!porPres[f.presentacion]) porPres[f.presentacion] = { presentacion:f.presentacion, rows:[], importe:0, costo:0, cantidad:0 };
-        porPres[f.presentacion].rows.push(f);
-        porPres[f.presentacion].importe += f.importe;
-        porPres[f.presentacion].costo += f.costo;
-        porPres[f.presentacion].cantidad += f.cantidad;
+        var subKey = esPaquete ? f.fruta : f.presentacion;
+        if (!porSub[subKey]) porSub[subKey] = { presentacion:subKey, rows:[], importe:0, costo:0, cantidad:0 };
+        porSub[subKey].rows.push(f);
+        porSub[subKey].importe += f.importe;
+        porSub[subKey].costo += f.costo;
+        porSub[subKey].cantidad += f.cantidad;
       });
-      g.porPresentacion = Object.keys(porPres).map(function(p){
-        var sub = porPres[p];
+      g.porPresentacion = Object.keys(porSub).map(function(p){
+        var sub = porSub[p];
         sub.utilidad = sub.importe - sub.costo;
         sub.pct = sub.importe > 0 ? (sub.utilidad / sub.importe * 100) : 0;
-        sub.numProductosUnicos = Object.keys(sub.rows.reduce(function(s,f){ s[f.nombreComercial]=1; return s; }, {})).length;
+        sub.unidad = unidadDeFilas(sub.rows);
+        sub.numProductosUnicos = esPaquete
+          ? sub.rows.length
+          : Object.keys(sub.rows.reduce(function(s,f){ s[f.nombreComercial]=1; return s; }, {})).length;
         return sub;
       }).sort(function(a,b){ return b.utilidad - a.utilidad; });
     });
@@ -931,7 +971,7 @@ function renderTablero() {
     html += '<div style="overflow-x:auto"><table class="cliente-table" style="white-space:nowrap"><thead><tr>'+
       '<th>PRODUCTO</th>'+
       '<th style="text-align:right">$ UTILIDAD</th><th style="text-align:right">% UTILIDAD</th>'+
-      '<th style="text-align:right">CANT. VENDIDA</th>'+
+      '<th style="text-align:right">CANT. VENDIDA</th><th>UNIDAD</th>'+
       '<th style="text-align:right">TOTAL VENTA</th><th style="text-align:right">PRECIO VENTA</th>'+
       '<th style="text-align:right">COSTO TOTAL</th><th style="text-align:right">COSTO UNITARIO</th>'+
     '</tr></thead><tbody>';
@@ -942,7 +982,8 @@ function renderTablero() {
         var pctGrupo = g.importe > 0 ? (g.utilidad / g.importe * 100) : 0;
         var numTiersG = contarTiers(g.rows);
         var numPreciosG = contarPrecios(g.rows);
-        var etiquetasG = [g.numProductosUnicos+' producto'+(g.numProductosUnicos!==1?"s":"")];
+        var etiquetaCantG = g.esPaquete ? (g.numProductosUnicos+' fruta'+(g.numProductosUnicos!==1?"s":"")) : (g.numProductosUnicos+' producto'+(g.numProductosUnicos!==1?"s":""));
+        var etiquetasG = [etiquetaCantG];
         if (numTiersG > 1) etiquetasG.push(numTiersG+' costos');
         if (numPreciosG > 1) etiquetasG.push(numPreciosG+' precios');
         html += '<tr class="cliente-row fruta-group-row" data-fruta="'+g.fruta.replace(/"/g,"&quot;")+'">'+
@@ -950,6 +991,7 @@ function renderTablero() {
           '<td style="text-align:right;font-weight:bold;'+utilStyle+'">$'+fmtMoney(g.utilidad)+'</td>'+
           '<td style="text-align:right;font-weight:bold;'+utilStyle+'">'+pctGrupo.toFixed(0)+'%</td>'+
           '<td style="text-align:right;color:#6b9e6b">—</td>'+
+          '<td style="color:#6b9e6b">'+g.unidad+'</td>'+
           '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+fmtMoney(g.importe)+'</td>'+
           '<td style="text-align:right;color:#6b9e6b">—</td>'+
           '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(g.costo)+'</td>'+
@@ -960,11 +1002,15 @@ function renderTablero() {
             var subKey = g.fruta + "||" + sub.presentacion;
             var subAbierto = !!presentacionExpandida[subKey];
             var utilStyleSub = sub.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
+            var etiquetaSub = g.esPaquete
+              ? '<b>'+sub.presentacion+'</b> <span class="cliente-sub">'+sub.numProductosUnicos+' registro'+(sub.numProductosUnicos!==1?"s":"")+'</span>'
+              : 'vendido en <b>'+sub.presentacion+'</b> <span class="cliente-sub">'+sub.numProductosUnicos+' producto'+(sub.numProductosUnicos!==1?"s":"")+'</span>';
             html += '<tr class="cliente-row presentacion-group-row" data-presentacion="'+subKey.replace(/"/g,"&quot;")+'" style="background:rgba(0,0,0,0.12)">'+
-              '<td style="padding-left:24px">'+(subAbierto?"▲":"▼")+' vendido en <b>'+sub.presentacion+'</b> <span class="cliente-sub">'+sub.numProductosUnicos+' producto'+(sub.numProductosUnicos!==1?"s":"")+'</span></td>'+
+              '<td style="padding-left:24px">'+(subAbierto?"▲":"▼")+' '+etiquetaSub+'</td>'+
               '<td style="text-align:right;'+utilStyleSub+'">$'+fmtMoney(sub.utilidad)+'</td>'+
               '<td style="text-align:right;'+utilStyleSub+'">'+sub.pct.toFixed(0)+'%</td>'+
               '<td style="text-align:right">'+(Math.round(sub.cantidad*100)/100)+'</td>'+
+              '<td>'+sub.unidad+'</td>'+
               '<td style="text-align:right">$'+fmtMoney(sub.importe)+'</td>'+
               '<td style="text-align:right;color:#6b9e6b">—</td>'+
               '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(sub.costo)+'</td>'+
@@ -982,6 +1028,7 @@ function renderTablero() {
                   '<td style="text-align:right;'+utilStyleFila+'">$'+fmtMoney(utilFila)+'</td>'+
                   '<td style="text-align:right;'+utilStyleFila+'">'+pctFila.toFixed(0)+'%</td>'+
                   '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
+                  '<td>'+f.presentacion+'</td>'+
                   '<td style="text-align:right">$'+fmtMoney(f.importe)+'</td>'+
                   '<td style="text-align:right">$'+fmtMoney(precioUnitFilaG)+'<div class="cliente-sub">'+fmtRangoFechas(f.fechaMin, f.fechaMax)+'</div></td>'+
                   '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(costoFila)+'</td>'+
@@ -998,6 +1045,7 @@ function renderTablero() {
       '<td style="text-align:right">$'+fmtMoney(totalUtilidad)+'</td>'+
       '<td style="text-align:right">'+totalPct.toFixed(0)+'%</td>'+
       '<td style="text-align:right">—</td>'+
+      '<td>—</td>'+
       '<td style="text-align:right">$'+fmtMoney(totalImporte)+'</td>'+
       '<td style="text-align:right">—</td>'+
       '<td style="text-align:right">$'+fmtMoney(totalCosto)+'</td>'+

@@ -27,17 +27,17 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 .clear-btn { background:rgba(255,100,100,0.15); border:1px solid rgba(255,100,100,0.3); border-radius:10px; color:#ff8a80; font-size:13px; padding:10px 14px; cursor:pointer; font-family:Georgia,serif; white-space:nowrap; }
 .refresh-btn { width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:10px; color:#5a8a5a; font-size:13px; padding:8px 0; cursor:pointer; font-family:Georgia,serif; }
 .cliente-table { width:100%; border-collapse:collapse; }
-.cliente-table th { color:#7ec87a; font-size:11px; letter-spacing:1.5px; padding:8px 12px; text-align:left; border-bottom:1px solid rgba(168,230,163,0.2); }
+.cliente-table th { color:#7ec87a; font-size:10px; letter-spacing:1px; padding:5px 6px; text-align:left; border-bottom:1px solid rgba(168,230,163,0.2); }
 .cliente-table th:last-child { text-align:right; }
 .cliente-row { border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; transition:background 0.15s; }
 .cliente-row:hover { background:rgba(76,175,80,0.08); }
-.cliente-row td { padding:12px 12px; font-size:14px; }
+.cliente-row td { padding:6px 6px; font-size:13px; }
 .cliente-row td:last-child { text-align:right; color:#a8e6a3; font-weight:bold; }
 .cliente-name { color:#e8f5e8; font-weight:bold; }
-.cliente-sub { color:#6b9e6b; font-size:12px; margin-top:2px; }
-.detail-row td { padding:6px 12px 6px 28px; font-size:13px; color:#aaa; background:rgba(0,0,0,0.2); }
+.cliente-sub { color:#6b9e6b; font-size:11px; margin-top:1px; }
+.detail-row td { padding:4px 6px 4px 24px; font-size:12px; color:#aaa; background:rgba(0,0,0,0.2); }
 .detail-row td:last-child { color:#a8e6a3; text-align:right; }
-.total-row td { padding:14px 12px; font-weight:bold; border-top:2px solid rgba(168,230,163,0.3); color:#a8e6a3; }
+.total-row td { padding:8px 6px; font-weight:bold; border-top:2px solid rgba(168,230,163,0.3); color:#a8e6a3; }
 
 /* ── KPIs (Tablero) ── */
 .kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -814,11 +814,33 @@ function renderTablero() {
     var factor = (f.presentacionComprada === f.presentacion) ? 1 : CAJAS_POR_BOTE;
     return f.costoUnitarioNominal / factor;
   }
+  var GRUPOS_PAQUETE_BERRIES = ["Ludo Berry 3-Pack","Ludo Berry Select","Ludo Berry Mix","Ludo Berry Max"];
+  var tablaCompleta = calcularTablaVentas(datos);
+  // Ludo Berry Select/3-Pack/Mix/Max: el precio de un pedido se reparte
+  // PAREJO entre sus frutas (ej. Max ÷4), pero cada fruta cuesta distinto
+  // (Blueberry vs Fresa). Comparar cada fruta contra su fracción pareja del
+  // precio hace que la fruta más cara del paquete se vea "con margen" y la
+  // más barata se vea "regalada" — aunque el cliente pagó un solo precio de
+  // paquete con margen normal. Por eso estos 4 productos se clasifican
+  // cliente/familia como PAQUETE COMPLETO (suma de todas sus frutas), no
+  // fruta por fruta — así Ludo Berry Max siempre aparece junto con su fresa
+  // correspondiente en la misma vista, nunca partido entre Clientes/Familia.
+  var totalesPorPaquete = {};
+  tablaCompleta.forEach(function(f){
+    if (GRUPOS_PAQUETE_BERRIES.indexOf(f.nombreComercial) === -1) return;
+    if (!totalesPorPaquete[f.nombreComercial]) totalesPorPaquete[f.nombreComercial] = { importe:0, costo:0 };
+    totalesPorPaquete[f.nombreComercial].importe += f.importe;
+    totalesPorPaquete[f.nombreComercial].costo += f.costo;
+  });
   function esVentaFamiliar(f) {
+    if (GRUPOS_PAQUETE_BERRIES.indexOf(f.nombreComercial) !== -1) {
+      var t = totalesPorPaquete[f.nombreComercial];
+      return !!t && t.importe > 0 && t.importe <= t.costo * 1.01;
+    }
     var nominalPorUnidadVendida = costoUnitarioPorVendida(f);
     return nominalPorUnidadVendida > 0 && f.precioVenta <= nominalPorUnidadVendida * 1.01;
   }
-  var tabla = calcularTablaVentas(datos).filter(function(f){
+  var tabla = tablaCompleta.filter(function(f){
     return vistaDetalleVentas === "familia" ? esVentaFamiliar(f) : !esVentaFamiliar(f);
   });
   // Algunos tramos de costo en config.js arrancan en una fecha "sentinel"
@@ -843,7 +865,6 @@ function renderTablero() {
   // Higo, Cherry, Elote, Pulpas, Mercado) conserva el agrupado por fruta de
   // siempre — Fresa suelta es distinta de Fresa-dentro-de-Max, así que
   // conservan agrupados separados.
-  var GRUPOS_PAQUETE_BERRIES = ["Ludo Berry 3-Pack","Ludo Berry Select","Ludo Berry Mix","Ludo Berry Max"];
   var GRUPO_BOTE_DIRECTO = "Vendido en bote";
   function esGrupoPaquete(nombreGrupo) {
     return GRUPOS_PAQUETE_BERRIES.indexOf(nombreGrupo) !== -1 || nombreGrupo === GRUPO_BOTE_DIRECTO;
@@ -870,22 +891,6 @@ function renderTablero() {
       gruposPorFruta[gk].importe += f.importe;
       gruposPorFruta[gk].costo += f.costo;
     });
-    // Cuenta tramos de costo distintos entre un conjunto de filas — si hay más
-    // de uno, se muestra la fecha de vigencia en el detalle para dejar claro
-    // por qué dos filas del mismo producto tienen costo/margen diferente.
-    function contarTiers(rows) {
-      var s = {};
-      rows.forEach(function(r){ if (r.costoVigenteDesde) s[r.costoVigenteDesde] = 1; });
-      return Object.keys(s).length;
-    }
-    // Cuenta precios de venta distintos entre un conjunto de filas — si hay
-    // más de uno, cada precio se muestra en su propia fila (con su rango de
-    // fechas debajo del precio unitario vendido).
-    function contarPrecios(rows) {
-      var s = {};
-      rows.forEach(function(r){ s[r.precioVenta] = 1; });
-      return Object.keys(s).length;
-    }
     var grupos = Object.keys(gruposPorFruta).map(function(fr){
       var g = gruposPorFruta[fr];
       g.utilidad = g.importe - g.costo;
@@ -900,9 +905,6 @@ function renderTablero() {
       var esPaquete = esGrupoPaquete(g.fruta);
       g.esPaquete = esPaquete;
       g.unidad = unidadDeFilas(g.rows);
-      g.numProductosUnicos = esPaquete
-        ? Object.keys(g.rows.reduce(function(s,f){ s[f.fruta]=1; return s; }, {})).length
-        : Object.keys(g.rows.reduce(function(s,f){ s[f.nombreComercial+"||"+f.presentacion]=1; return s; }, {})).length;
       // Nivel 2: para los grupos-paquete, desglosa por FRUTA (qué fruta se
       // vendió dentro de ese producto). Para el resto, sigue agrupando por
       // presentación VENDIDA (bote suelto vs clamshell en paquetes, etc.) —
@@ -922,9 +924,6 @@ function renderTablero() {
         sub.utilidad = sub.importe - sub.costo;
         sub.pct = sub.importe > 0 ? (sub.utilidad / sub.importe * 100) : 0;
         sub.unidad = unidadDeFilas(sub.rows);
-        sub.numProductosUnicos = esPaquete
-          ? sub.rows.length
-          : Object.keys(sub.rows.reduce(function(s,f){ s[f.nombreComercial]=1; return s; }, {})).length;
         return sub;
       }).sort(function(a,b){ return b.utilidad - a.utilidad; });
     });
@@ -989,8 +988,8 @@ function renderTablero() {
       var utilStyleFila = utilFila < 0 ? "color:#ff7070" : "color:#a8e6a3";
       var pesoTexto = bold ? "font-weight:bold" : "";
       var colorLabel = bold ? "color:#e8f5e8" : "";
-      var claseFila = indentPx >= 40 ? "detail-row" : "cliente-row";
-      var estiloFila = indentPx === 24 ? " style=\"cursor:default;background:rgba(0,0,0,0.12)\"" : (claseFila==="cliente-row" ? " style=\"cursor:default\"" : "");
+      var claseFila = indentPx >= 28 ? "detail-row" : "cliente-row";
+      var estiloFila = indentPx === 16 ? " style=\"cursor:default;background:rgba(0,0,0,0.12)\"" : (claseFila==="cliente-row" ? " style=\"cursor:default\"" : "");
       return '<tr class="'+claseFila+'"'+estiloFila+'>'+
         '<td style="padding-left:'+indentPx+'px;'+pesoTexto+';'+colorLabel+'">'+label+'</td>'+
         '<td style="text-align:right;'+pesoTexto+';'+utilStyleFila+'">$'+fmtMoney(utilFila)+'</td>'+
@@ -1012,14 +1011,8 @@ function renderTablero() {
         var abierto = !!frutaExpandida[g.fruta];
         var utilStyle = g.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
         var pctGrupo = g.importe > 0 ? (g.utilidad / g.importe * 100) : 0;
-        var numTiersG = contarTiers(g.rows);
-        var numPreciosG = contarPrecios(g.rows);
-        var etiquetaCantG = g.esPaquete ? (g.numProductosUnicos+' fruta'+(g.numProductosUnicos!==1?"s":"")) : (g.numProductosUnicos+' producto'+(g.numProductosUnicos!==1?"s":""));
-        var etiquetasG = [etiquetaCantG];
-        if (numTiersG > 1) etiquetasG.push(numTiersG+' costos');
-        if (numPreciosG > 1) etiquetasG.push(numPreciosG+' precios');
         html += '<tr class="cliente-row fruta-group-row" data-fruta="'+g.fruta.replace(/"/g,"&quot;")+'">'+
-          '<td style="font-weight:bold;color:#e8f5e8">'+(abierto?"▲":"▼")+' '+g.fruta+' <span class="cliente-sub">'+etiquetasG.join(' · ')+'</span></td>'+
+          '<td style="font-weight:bold;color:#e8f5e8">'+(abierto?"▲":"▼")+' '+g.fruta+'</td>'+
           '<td style="text-align:right;font-weight:bold;'+utilStyle+'">$'+fmtMoney(g.utilidad)+'</td>'+
           '<td style="text-align:right;font-weight:bold;'+utilStyle+'">'+pctGrupo.toFixed(0)+'%</td>'+
           '<td style="text-align:right;color:#6b9e6b">—</td>'+
@@ -1033,7 +1026,7 @@ function renderTablero() {
           g.porPresentacion.forEach(function(sub){
             if (sub.rows.length === 1) {
               var labelDirecta = g.esPaquete ? sub.rows[0].fruta : sub.rows[0].nombreComercial;
-              html += renderFilaDirecta(labelDirecta, sub.rows[0], 24, false);
+              html += renderFilaDirecta(labelDirecta, sub.rows[0], 16, false);
               return;
             }
             var subKey = g.fruta + "||" + sub.presentacion;
@@ -1042,11 +1035,9 @@ function renderTablero() {
             // "vendido en X" solo tiene sentido cuando X es la fruta (grupos-
             // paquete) — cuando X es la presentación (bote/clamshell/etc.) ya
             // se ve en la columna UNIDAD, así que ahí no hace falta repetirlo.
-            var etiquetaSub = g.esPaquete
-              ? '<b>'+sub.presentacion+'</b> <span class="cliente-sub">'+sub.numProductosUnicos+' registro'+(sub.numProductosUnicos!==1?"s":"")+'</span>'
-              : '<span class="cliente-sub">'+sub.numProductosUnicos+' producto'+(sub.numProductosUnicos!==1?"s":"")+'</span>';
+            var etiquetaSub = g.esPaquete ? '<b>'+sub.presentacion+'</b>' : '';
             html += '<tr class="cliente-row presentacion-group-row" data-presentacion="'+subKey.replace(/"/g,"&quot;")+'" style="background:rgba(0,0,0,0.12)">'+
-              '<td style="padding-left:24px">'+(subAbierto?"▲":"▼")+' '+etiquetaSub+'</td>'+
+              '<td style="padding-left:16px">'+(subAbierto?"▲":"▼")+' '+etiquetaSub+'</td>'+
               '<td style="text-align:right;'+utilStyleSub+'">$'+fmtMoney(sub.utilidad)+'</td>'+
               '<td style="text-align:right;'+utilStyleSub+'">'+sub.pct.toFixed(0)+'%</td>'+
               '<td style="text-align:right">'+(Math.round(sub.cantidad*100)/100)+'</td>'+
@@ -1058,7 +1049,7 @@ function renderTablero() {
             '</tr>';
             if (subAbierto) {
               sub.rows.forEach(function(f){
-                html += renderFilaDirecta(f.nombreComercial, f, 40, false);
+                html += renderFilaDirecta(f.nombreComercial, f, 28, false);
               });
             }
           });

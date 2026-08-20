@@ -976,7 +976,39 @@ function renderTablero() {
       '<th style="text-align:right">COSTO TOTAL</th><th style="text-align:right">COSTO UNITARIO</th>'+
     '</tr></thead><tbody>';
 
+    // Fila "directa": cuando un grupo o sub-grupo solo tiene UN registro
+    // adentro, no tiene caso obligar a hacer clic para desplegar algo que
+    // ya es un solo renglón — se muestra de una vez con el detalle completo
+    // (precio/costo unitario + su rango de vigencia), igual que se vería si
+    // se hubiera desplegado hasta el fondo.
+    function renderFilaDirecta(label, f, indentPx, bold) {
+      var costoFila = f.costo;
+      var utilFila = f.importe - costoFila;
+      var pctFila = f.importe > 0 ? (utilFila / f.importe * 100) : 0;
+      var precioUnitFilaG = f.cantidad > 0 ? f.importe / f.cantidad : 0;
+      var utilStyleFila = utilFila < 0 ? "color:#ff7070" : "color:#a8e6a3";
+      var pesoTexto = bold ? "font-weight:bold" : "";
+      var colorLabel = bold ? "color:#e8f5e8" : "";
+      var claseFila = indentPx >= 40 ? "detail-row" : "cliente-row";
+      var estiloFila = indentPx === 24 ? " style=\"cursor:default;background:rgba(0,0,0,0.12)\"" : (claseFila==="cliente-row" ? " style=\"cursor:default\"" : "");
+      return '<tr class="'+claseFila+'"'+estiloFila+'>'+
+        '<td style="padding-left:'+indentPx+'px;'+pesoTexto+';'+colorLabel+'">'+label+'</td>'+
+        '<td style="text-align:right;'+pesoTexto+';'+utilStyleFila+'">$'+fmtMoney(utilFila)+'</td>'+
+        '<td style="text-align:right;'+pesoTexto+';'+utilStyleFila+'">'+pctFila.toFixed(0)+'%</td>'+
+        '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
+        '<td>'+f.presentacion+'</td>'+
+        '<td style="text-align:right;'+pesoTexto+'">$'+fmtMoney(f.importe)+'</td>'+
+        '<td style="text-align:right">$'+fmtMoney(precioUnitFilaG)+'<div class="cliente-sub">'+fmtRangoFechas(f.fechaMin, f.fechaMax)+'</div></td>'+
+        '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(costoFila)+'</td>'+
+        '<td style="text-align:right">$'+fmtMoney(costoUnitarioPorVendida(f))+'<div class="cliente-sub">'+fmtRangoVigencia(costoVigenteDesdeMostrado(f), f.costoVigenteHasta)+'</div></td>'+
+      '</tr>';
+    }
+
     grupos.forEach(function(g){
+        if (g.rows.length === 1) {
+          html += renderFilaDirecta(g.fruta, g.rows[0], 0, true);
+          return;
+        }
         var abierto = !!frutaExpandida[g.fruta];
         var utilStyle = g.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
         var pctGrupo = g.importe > 0 ? (g.utilidad / g.importe * 100) : 0;
@@ -999,12 +1031,20 @@ function renderTablero() {
         '</tr>';
         if (abierto) {
           g.porPresentacion.forEach(function(sub){
+            if (sub.rows.length === 1) {
+              var labelDirecta = g.esPaquete ? sub.rows[0].fruta : sub.rows[0].nombreComercial;
+              html += renderFilaDirecta(labelDirecta, sub.rows[0], 24, false);
+              return;
+            }
             var subKey = g.fruta + "||" + sub.presentacion;
             var subAbierto = !!presentacionExpandida[subKey];
             var utilStyleSub = sub.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
+            // "vendido en X" solo tiene sentido cuando X es la fruta (grupos-
+            // paquete) — cuando X es la presentación (bote/clamshell/etc.) ya
+            // se ve en la columna UNIDAD, así que ahí no hace falta repetirlo.
             var etiquetaSub = g.esPaquete
               ? '<b>'+sub.presentacion+'</b> <span class="cliente-sub">'+sub.numProductosUnicos+' registro'+(sub.numProductosUnicos!==1?"s":"")+'</span>'
-              : 'vendido en <b>'+sub.presentacion+'</b> <span class="cliente-sub">'+sub.numProductosUnicos+' producto'+(sub.numProductosUnicos!==1?"s":"")+'</span>';
+              : '<span class="cliente-sub">'+sub.numProductosUnicos+' producto'+(sub.numProductosUnicos!==1?"s":"")+'</span>';
             html += '<tr class="cliente-row presentacion-group-row" data-presentacion="'+subKey.replace(/"/g,"&quot;")+'" style="background:rgba(0,0,0,0.12)">'+
               '<td style="padding-left:24px">'+(subAbierto?"▲":"▼")+' '+etiquetaSub+'</td>'+
               '<td style="text-align:right;'+utilStyleSub+'">$'+fmtMoney(sub.utilidad)+'</td>'+
@@ -1018,22 +1058,7 @@ function renderTablero() {
             '</tr>';
             if (subAbierto) {
               sub.rows.forEach(function(f){
-                var costoFila = f.costo;
-                var utilFila = f.importe - costoFila;
-                var pctFila = f.importe > 0 ? (utilFila / f.importe * 100) : 0;
-                var precioUnitFilaG = f.cantidad > 0 ? f.importe / f.cantidad : 0;
-                var utilStyleFila = utilFila < 0 ? "color:#ff7070" : "color:#a8e6a3";
-                html += '<tr class="detail-row">'+
-                  '<td style="padding-left:40px">'+f.nombreComercial+'</td>'+
-                  '<td style="text-align:right;'+utilStyleFila+'">$'+fmtMoney(utilFila)+'</td>'+
-                  '<td style="text-align:right;'+utilStyleFila+'">'+pctFila.toFixed(0)+'%</td>'+
-                  '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
-                  '<td>'+f.presentacion+'</td>'+
-                  '<td style="text-align:right">$'+fmtMoney(f.importe)+'</td>'+
-                  '<td style="text-align:right">$'+fmtMoney(precioUnitFilaG)+'<div class="cliente-sub">'+fmtRangoFechas(f.fechaMin, f.fechaMax)+'</div></td>'+
-                  '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(costoFila)+'</td>'+
-                  '<td style="text-align:right">$'+fmtMoney(costoUnitarioPorVendida(f))+'<div class="cliente-sub">'+fmtRangoVigencia(costoVigenteDesdeMostrado(f), f.costoVigenteHasta)+'</div></td>'+
-                '</tr>';
+                html += renderFilaDirecta(f.nombreComercial, f, 40, false);
               });
             }
           });

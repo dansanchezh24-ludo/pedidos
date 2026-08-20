@@ -1320,7 +1320,11 @@ function renderResumen() {
     if(isOpen){
       info.items.forEach(function(it){
         var dtr=document.createElement("tr"); dtr.className="detail-row";
-        dtr.innerHTML='<td style="color:#a8e6a3">'+it.cantidad+'× '+it.producto+'</td><td style="color:#5a8a5a;font-size:12px">'+it.fecha+'</td><td>$'+fmtMoney(it.total)+'</td>';
+        // Ludo Berry Max siempre lleva Fresa además de las 3 frutas elegidas,
+        // pero el nombre guardado en Sheets no la menciona (es implícita, ver
+        // parsearProducto) — se agrega solo para mostrar, sin tocar el dato.
+        var prodTexto = it.producto + (it.producto.indexOf("Ludo Berry Max") !== -1 ? " + Fresa" : "");
+        dtr.innerHTML='<td style="color:#a8e6a3">'+it.cantidad+'× '+prodTexto+'</td><td style="color:#5a8a5a;font-size:12px">'+it.fecha+'</td><td>$'+fmtMoney(it.total)+'</td>';
         tbody.appendChild(dtr);
       });
     }

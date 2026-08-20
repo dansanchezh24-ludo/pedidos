@@ -84,8 +84,10 @@ var CATALOGO = [
     ] },
   { id:"limon_persa",      nombre:"Limón persa sin semilla",       precio:50,  costo:37,  unidad:"kg", piezasPorKg:10, slots:0, emoji:"🍋" },
   { id:"ludo_pack",        nombre:"Ludo Berry 3-Pack",             precio:150, costo:60,  slots:1, emoji:"📦" },
-  { id:"ludo_berry_max",   nombre:"Ludo Berry Max",                precio:230, costo:225, slots:3, emoji:"✨" },
-  { id:"ludo_mix",         nombre:"Ludo Berry Mix",                precio:160, costo:180, slots:3, emoji:"🌈" },
+  { id:"ludo_berry_max",   nombre:"Ludo Berry Max",                precio:230, costo:225, slots:3, emoji:"✨",
+    frutasFijas: ["Zarzamora","Frambuesa","Blueberry"] }, // + Fresa implícita (ver costoPaqueteBerries en index.html y parsearProducto en panel.html) — no elegible, siempre las mismas 3 + fresa.
+  { id:"ludo_mix",         nombre:"Ludo Berry Mix",                precio:160, costo:180, slots:3, emoji:"🌈",
+    frutasFijas: ["Zarzamora","Frambuesa","Blueberry"] }, // siempre 1 de cada una — no elegible.
   { id:"ludo_select",      nombre:"Ludo Berry Select",             precio:55,  costo:60,  slots:1, emoji:"🌟" },
   { id:"elote_parrilla",   nombre:"Ludo Duo",                      precio:190, costo:100, slots:0, emoji:"🌽", elotes:6 },
   { id:"elote_familiar",   nombre:"Ludo Elotiza",                  precio:280, costo:150, slots:0, emoji:"🌽", elotes:9 },

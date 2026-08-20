@@ -104,9 +104,7 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 .pedido-line { display:flex; justify-content:space-between; align-items:baseline; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:14px; }
 .pedido-line:last-of-type { border-bottom:none; }
 .pedido-fruta { color:#e8f5e8; }
-.pedido-cant { color:#7ec87a; font-size:13px; margin-left:6px; }
-.pedido-costo { color:#a8e6a3; font-weight:bold; }
-.pedido-total-row { display:flex; justify-content:space-between; border-top:2px solid rgba(168,230,163,0.25); padding-top:10px; margin-top:6px; font-size:15px; font-weight:bold; color:#a8e6a3; }
+.pedido-cant { color:#7ec87a; font-size:13px; }
 /* Elotes */
 .elote-card { background:rgba(255,200,0,0.05); border:1px solid rgba(255,200,0,0.15); border-radius:14px; padding:16px 18px; }
 .elote-card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
@@ -1038,6 +1036,82 @@ function renderTablero() {
     html += '<td style="text-align:right">$'+fmtMoney(totalGeneral)+'</td></tr>';
     html += '</tbody></table></div></div>';
   }
+
+  // ── Precio de compra vs venta — solo lo que hoy es seleccionable en
+  // index.html (getCatalogoDisponible: ACTIVOS + IDS de precio familiar +
+  // MERCADO). CATALOGO trae productos viejos que ya no se pueden pedir
+  // (Familiar/Individual Nx, Elote Blanco packs, Ludo Duo/Elotiza/Fiesta/
+  // Parrillada) pero se dejan ahí para seguir costeando pedidos históricos
+  // en Sheets — esos no cuentan como "visibles en pedidos" y se excluyen
+  // aquí. Si agregas/quitas algo de ACTIVOS o IDS en index.html, actualiza
+  // esta lista también.
+  var PEDIBLES_IDS = [
+    "ludo_select","ludo_pack","ludo_mix","ludo_berry_max","fresa","cherry_rojo","cherry_amarillo",
+    "tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo","zarzamora","frambuesa","blueberry",
+    "limon_persa","tuna","maracuya","rambutan","ciruela_roja","jamaica","coco_cafe","pitahaya","cereza",
+    "higo","elote_blanco","huevo_12","huevo_18","chile_arbol_250","ajo_pelado","concentrado_pulpas"
+  ];
+  // Los paquetes de berries (Select/3-Pack/Mix/Max) NO tienen un costo fijo:
+  // el campo CATALOGO.costo de estos 4 quedó desactualizado/plano y no refleja
+  // la fórmula real. El costo real siempre se arma con el costo de bote
+  // VIGENTE de cada fruta (ver HIST_COSTO_PROVEEDOR) entre 3 (1 bote = 3
+  // clamshells), igual que ya calcula el reporte de ventas:
+  //   Select / 3-Pack: 1 fruta elegida — varía según cuál (bote de esa fruta
+  //     ÷3 por clamshell; el 3-Pack usa las 3 clamshells de la misma fruta,
+  //     así que su costo total = 1 bote completo de esa fruta).
+  //   Mix: 1 clamshell de cada una de las 3 frutas base — suma de los 3
+  //     botes vigentes ÷ 3.
+  //   Max: Mix + 1 clamshell de Fresa (costo por clamshell individual, sin
+  //     dividir entre bote).
+  function costoBoteVigente(fruta) {
+    var h = HIST_COSTO_PROVEEDOR[fruta];
+    return h && h.length ? h[h.length-1].costo : 0;
+  }
+  function costoClamshellVigente(fruta) {
+    var h = HIST_COSTO_PROVEEDOR_CLAMSHELL[fruta];
+    return h && h.length ? h[h.length-1].costo : 0;
+  }
+  var botesVigentes = FRUTAS.map(costoBoteVigente); // [Zarzamora, Frambuesa, Blueberry]
+  var costoMixVigente = botesVigentes.reduce(function(s,c){ return s+c/CAJAS_POR_BOTE; }, 0);
+  var costoMaxVigente = costoMixVigente + costoClamshellVigente("Fresa");
+  var costoSelectMin = Math.min.apply(null, botesVigentes) / CAJAS_POR_BOTE;
+  var costoSelectMax = Math.max.apply(null, botesVigentes) / CAJAS_POR_BOTE;
+  var COSTO_FORMULA_IDS = {
+    ludo_select: '$'+fmtMoney(costoSelectMin)+' – $'+fmtMoney(costoSelectMax)+' según fruta',
+    ludo_pack:   '$'+fmtMoney(Math.min.apply(null,botesVigentes))+' – $'+fmtMoney(Math.max.apply(null,botesVigentes))+' según fruta',
+    ludo_mix:    '$'+fmtMoney(costoMixVigente)+' (Zarzamora+Frambuesa+Blueberry ÷3)',
+    ludo_berry_max: '$'+fmtMoney(costoMaxVigente)+' (Mix + Fresa)'
+  };
+
+  html += '<div class="kpi-block"><div class="kpi-block-title">PRODUCTOS ACTUALES — COMPRA VS VENTA</div>';
+  html += '<div style="overflow-x:auto"><table class="cliente-table" style="white-space:nowrap"><thead><tr>'+
+    '<th>PRODUCTO</th><th style="text-align:right">PRECIO COMPRA</th><th style="text-align:right">PRECIO VENTA</th>'+
+  '</tr></thead><tbody>';
+  CATALOGO.filter(function(cat){ return PEDIBLES_IDS.indexOf(cat.id) !== -1; }).forEach(function(cat){
+    var unidadSuf = cat.unidad === "kg" ? "/kg" : "";
+    if (COSTO_FORMULA_IDS[cat.id]) {
+      html += '<tr class="cliente-row" style="cursor:default">'+
+        '<td>'+(cat.emoji||"")+' '+cat.nombre+'</td>'+
+        '<td style="text-align:right;color:#ffb74d">'+COSTO_FORMULA_IDS[cat.id]+'</td>'+
+        '<td style="text-align:right;color:#a8e6a3">$'+fmtMoney(cat.precio)+'</td>'+
+      '</tr>';
+    } else if (cat.presets && cat.presets.length) {
+      cat.presets.forEach(function(pr){
+        html += '<tr class="cliente-row" style="cursor:default">'+
+          '<td>'+(cat.emoji||"")+' '+cat.nombre+' ('+pr.label+')</td>'+
+          '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(pr.costo)+'</td>'+
+          '<td style="text-align:right;color:#a8e6a3">$'+fmtMoney(pr.precio)+'</td>'+
+        '</tr>';
+      });
+    } else {
+      html += '<tr class="cliente-row" style="cursor:default">'+
+        '<td>'+(cat.emoji||"")+' '+cat.nombre+'</td>'+
+        '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(cat.costo)+unidadSuf+'</td>'+
+        '<td style="text-align:right;color:#a8e6a3">$'+fmtMoney(cat.precio)+unidadSuf+'</td>'+
+      '</tr>';
+    }
+  });
+  html += '</tbody></table></div></div>';
 
   container.innerHTML = html;
   container.querySelectorAll(".periodo-btn").forEach(function(btn){
@@ -2010,54 +2084,46 @@ function renderProveedor() {
   }
 
   // ── Bloque "Pedido para proveedor" ──
+  // Solo listado de compra: fecha del pedido, cantidad, presentación y
+  // fruta/producto — sin importes. `filtro` siempre es una sola fecha (esta
+  // función no corre sin fecha seleccionada, ver arriba), así que la fecha
+  // se muestra una sola vez como encabezado, no repetida por línea.
   var pedidoBox = document.createElement("div");
   pedidoBox.className = "pedido-box";
 
-  var labelFecha = filtro ? filtro : "todas las fechas";
-  var lineas = ["📦 Pedido berries — "+labelFecha];
+  var lineas = ["📦 Pedido proveedor — "+filtro];
   lineas.push("");
   Object.keys(B).sort().forEach(function(fn){
     var b = B[fn];
-    var precioKgCopy = Math.round(b.costoProveedor / b.kgComprar);
-    var formulaCopy = precioKgCopy+" × "+b.kgComprar.toFixed(2)+" kg = $"+fmtMoney(b.costoProveedor);
     if (b.esPorKg) {
-      lineas.push(fn+": "+b.kgComprar.toFixed(2)+" kg — $"+fmtMoney(b.costoProveedor));
+      lineas.push(b.kgComprar.toFixed(2)+" kg — "+fn);
     } else {
       var unidad = b.esPorClamshell ? "clamshell" : "bote";
-      lineas.push(fn+": "+b.botesComprar+" "+unidad+(b.botesComprar!==1?"s":"")+" ("+b.kgComprar.toFixed(1)+" kg) — $"+fmtMoney(b.costoProveedor));
+      lineas.push(b.botesComprar+" "+unidad+(b.botesComprar!==1?"s":"")+" — "+fn);
     }
-    lineas.push("  "+formulaCopy);
   });
   Object.keys(E).sort().forEach(function(en){
-    var e = E[en];
-    lineas.push(en+": "+etiquetaCharola(e.piezas)+" — $"+fmtMoney(e.costoTotal));
+    lineas.push(etiquetaCharola(E[en].piezas)+" — "+en);
   });
   Object.keys(P).sort().forEach(function(pn){
-    var p = P[pn];
-    lineas.push(pn+": "+p.piezas+" pz — $"+fmtMoney(p.costoTotal));
+    lineas.push(P[pn].piezas+" pz — "+pn);
   });
   Object.keys(M).sort().forEach(function(mn){
-    var m = M[mn];
-    lineas.push(mn+": "+m.kgNecesarios+" kg — $"+fmtMoney(m.costoTotal));
+    lineas.push(M[mn].kgNecesarios+" kg — "+mn);
   });
   Object.keys(H).sort().forEach(function(hn){
-    var h = H[hn];
-    lineas.push(hn+": "+h.unidades+" — $"+fmtMoney(h.costoTotal));
+    lineas.push(H[hn].unidades+" — "+hn);
   });
   Object.keys(PU).sort().forEach(function(sn){
-    var pu = PU[sn];
-    lineas.push("Concentrado de Pulpas ("+sn+"): "+pu.unidades+" — $"+fmtMoney(pu.costoTotal));
+    lineas.push(PU[sn].unidades+" — Pulpa de ("+sn+")");
   });
   Object.keys(O).sort().forEach(function(pn){
-    var o = O[pn];
-    lineas.push(pn+": "+o.unidades+" — $"+fmtMoney(o.costoTotal));
+    lineas.push(O[pn].unidades+" — "+pn);
   });
-  lineas.push("");
-  lineas.push("Total a pagar: $"+fmtMoney(calc.costoTotalProveedor));
   var textoCompleto = lineas.join("\n");
 
   var headerHTML = '<div class="pedido-box-header">'+
-    '<span class="pedido-box-title">📋 PEDIDO PARA PROVEEDOR</span>'+
+    '<span class="pedido-box-title">📋 PEDIDO PARA PROVEEDOR — '+filtro+'</span>'+
     '<button class="copy-btn" id="copyPedidoBtn">📋 Copiar</button>'+
   '</div>';
 
@@ -2065,68 +2131,57 @@ function renderProveedor() {
   Object.keys(B).sort().forEach(function(fn){
     var b = B[fn];
     var emoji = emojiDeFruta(fn);
-    var precioKg = Math.round(b.costoProveedor / b.kgComprar);
-    var formula = precioKg+' × '+b.kgComprar.toFixed(2)+' kg = $'+fmtMoney(b.costoProveedor);
-    var cantLabel;
+    var presentacion, cantLabel;
     if (b.esPorKg) {
-      cantLabel = b.kgComprar.toFixed(2)+' kg';
+      presentacion = "kg";
+      cantLabel = b.kgComprar.toFixed(2);
     } else {
-      var unidad = b.esPorClamshell ? "clamshell" : "bote";
-      cantLabel = b.botesComprar+' '+unidad+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;'+b.kgComprar.toFixed(1)+' kg';
+      presentacion = b.esPorClamshell ? "clamshell"+(b.botesComprar!==1?"s":"") : "bote"+(b.botesComprar!==1?"s":"");
+      cantLabel = b.botesComprar;
     }
-    lineasHTML += '<div class="pedido-line" style="flex-direction:column;align-items:stretch;gap:3px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:baseline">'+
-        '<span class="pedido-fruta">'+emoji+' '+fn+'<span class="pedido-cant">'+cantLabel+'</span></span>'+
-        '<span class="pedido-costo">$'+fmtMoney(b.costoProveedor)+'</span>'+
-      '</div>'+
-      '<div style="font-size:11px;color:#6b9e6b;letter-spacing:0.3px">'+formula+'</div>'+
+    lineasHTML += '<div class="pedido-line">'+
+      '<span class="pedido-cant">'+cantLabel+' '+presentacion+'</span>'+
+      '<span class="pedido-fruta">'+emoji+' '+fn+'</span>'+
     '</div>';
   });
   Object.keys(E).sort().forEach(function(en){
-    var e = E[en];
     lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-fruta">🌽 '+en+'<span class="pedido-cant">'+etiquetaCharola(e.piezas)+'</span></span>'+
-      '<span class="pedido-costo">$'+fmtMoney(e.costoTotal)+'</span>'+
+      '<span class="pedido-cant">'+etiquetaCharola(E[en].piezas)+'</span>'+
+      '<span class="pedido-fruta">🌽 '+en+'</span>'+
     '</div>';
   });
   Object.keys(P).sort().forEach(function(pn){
-    var p = P[pn];
     lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-fruta">'+emojiDeFruta(pn)+' '+pn+'<span class="pedido-cant">'+p.piezas+' pz</span></span>'+
-      '<span class="pedido-costo">$'+fmtMoney(p.costoTotal)+'</span>'+
+      '<span class="pedido-cant">'+P[pn].piezas+' pz</span>'+
+      '<span class="pedido-fruta">'+emojiDeFruta(pn)+' '+pn+'</span>'+
     '</div>';
   });
   Object.keys(M).sort().forEach(function(mn){
-    var m = M[mn];
     lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-fruta">'+emojiDeFruta(mn)+' '+mn+'<span class="pedido-cant">'+m.kgNecesarios+' kg</span></span>'+
-      '<span class="pedido-costo">$'+fmtMoney(m.costoTotal)+'</span>'+
+      '<span class="pedido-cant">'+M[mn].kgNecesarios+' kg</span>'+
+      '<span class="pedido-fruta">'+emojiDeFruta(mn)+' '+mn+'</span>'+
     '</div>';
   });
   Object.keys(H).sort().forEach(function(hn){
-    var h = H[hn];
     lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-fruta">🥚 '+hn+'<span class="pedido-cant">'+h.unidades+'</span></span>'+
-      '<span class="pedido-costo">$'+fmtMoney(h.costoTotal)+'</span>'+
+      '<span class="pedido-cant">'+H[hn].unidades+'</span>'+
+      '<span class="pedido-fruta">🥚 '+hn+'</span>'+
     '</div>';
   });
   Object.keys(PU).sort().forEach(function(sn){
-    var pu = PU[sn];
     lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-fruta">🧃 Concentrado de Pulpas ('+sn+')<span class="pedido-cant">'+pu.unidades+'</span></span>'+
-      '<span class="pedido-costo">$'+fmtMoney(pu.costoTotal)+'</span>'+
+      '<span class="pedido-cant">'+PU[sn].unidades+'</span>'+
+      '<span class="pedido-fruta">🧃 Pulpa de ('+sn+')</span>'+
     '</div>';
   });
   Object.keys(O).sort().forEach(function(pn){
-    var o = O[pn];
     lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-fruta">📦 '+pn+'<span class="pedido-cant">'+o.unidades+'</span></span>'+
-      '<span class="pedido-costo">$'+fmtMoney(o.costoTotal)+'</span>'+
+      '<span class="pedido-cant">'+O[pn].unidades+'</span>'+
+      '<span class="pedido-fruta">📦 '+pn+'</span>'+
     '</div>';
   });
-  var totalHTML = '<div class="pedido-total-row"><span>TOTAL A PAGAR</span><span>$'+fmtMoney(calc.costoTotalProveedor)+'</span></div>';
 
-  pedidoBox.innerHTML = headerHTML + lineasHTML + totalHTML;
+  pedidoBox.innerHTML = headerHTML + lineasHTML;
   container.appendChild(pedidoBox);
 
   document.getElementById("copyPedidoBtn").addEventListener("click", function(){

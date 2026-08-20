@@ -409,15 +409,21 @@ var NOMBRE_BOTE_DIRECTO = { "Blueberry":"Bote Blueberry", "Frambuesa":"Bote Fram
 // Elote amarillo y Elote Select son el mismo producto (varió el nombre con el tiempo);
 // todos los elotes (amarillo y blanco) se venden en charola, no por pieza suelta.
 var ELOTE_NOMBRE_COMERCIAL = { "Elote amarillo":"Elote Select", "Elote Select":"Elote Select", "Elote blanco":"Elote blanco" };
-// Productos cuyo nombreComercial es un PAQUETE compartido entre varias
-// frutas (Select/3-Pack/Mix/Max, Familiar Nx) — se usa para saber cuándo el
-// precio de un pedido se repartió entre frutas y hay que re-repartirlo
-// proporcional al costo real (ver calcularTablaVentas). Ojo: no basta con
-// "¿hay más de una fruta bajo este nombreComercial?" — nombreComercial de
-// Concentrado de Pulpas es el SABOR (ej. "Fresa", "Maracuyá"), que puede
-// coincidir por nombre con una fruta suelta de otra categoría sin ser el
-// mismo producto ni deber mezclarse con ella.
-var PRODUCTOS_MULTIFRUTA = ["Ludo Berry 3-Pack","Ludo Berry Select","Ludo Berry Mix","Ludo Berry Max"];
+// Productos donde UN SOLO pedido combina varias frutas distintas bajo un
+// solo precio (Mix: 1 clamshell de cada una de las 3 frutas base; Max: Mix +
+// Fresa) — ahí sí hace falta re-repartir el precio proporcional al costo
+// real de cada fruta (ver calcularTablaVentas), porque el precio de ESE
+// pedido se dividió entre frutas de costo distinto.
+// Ludo Berry Select y 3-Pack NO entran aquí: cada pedido de esos es de UNA
+// sola fruta elegida (slots:1) — el precio completo ya es de esa fruta, no
+// hay nada que repartir. Repartirlo mezclaría sin querer pedidos de
+// clientes distintos que eligieron frutas distintas, como si fueran un solo
+// pedido combinado.
+// Ojo: no basta con "¿hay más de una fruta bajo este nombreComercial?" —
+// nombreComercial de Concentrado de Pulpas es el SABOR (ej. "Fresa",
+// "Maracuyá"), que puede coincidir por nombre con una fruta suelta de otra
+// categoría sin ser el mismo producto ni deber mezclarse con ella.
+var PRODUCTOS_MULTIFRUTA = ["Ludo Berry Mix","Ludo Berry Max"];
 function esNombreFamiliar(nombreComercial) {
   return nombreComercial.indexOf("Familiar (bote)") === 0;
 }
@@ -855,26 +861,27 @@ function renderTablero() {
     var factor = (f.presentacionComprada === f.presentacion) ? 1 : CAJAS_POR_BOTE;
     return f.costoUnitarioNominal / factor;
   }
-  var GRUPOS_PAQUETE_BERRIES = PRODUCTOS_MULTIFRUTA;
   var tablaCompleta = calcularTablaVentas(datos);
-  // Ludo Berry Select/3-Pack/Mix/Max: el precio de un pedido se reparte
-  // PAREJO entre sus frutas (ej. Max ÷4), pero cada fruta cuesta distinto
-  // (Blueberry vs Fresa). Comparar cada fruta contra su fracción pareja del
-  // precio hace que la fruta más cara del paquete se vea "con margen" y la
-  // más barata se vea "regalada" — aunque el cliente pagó un solo precio de
-  // paquete con margen normal. Por eso estos 4 productos se clasifican
-  // cliente/familia como PAQUETE COMPLETO (suma de todas sus frutas), no
-  // fruta por fruta — así Ludo Berry Max siempre aparece junto con su fresa
+  // Ludo Berry Mix/Max: el precio de un pedido se reparte PAREJO entre sus
+  // frutas (ej. Max ÷4), pero cada fruta cuesta distinto (Blueberry vs
+  // Fresa). Comparar cada fruta contra su fracción pareja del precio hace
+  // que la fruta más cara del paquete se vea "con margen" y la más barata
+  // se vea "regalada" — aunque el cliente pagó un solo precio de paquete
+  // con margen normal. Por eso estos productos se clasifican cliente/
+  // familia como PAQUETE COMPLETO (suma de todas sus frutas), no fruta por
+  // fruta — así Ludo Berry Max siempre aparece junto con su fresa
   // correspondiente en la misma vista, nunca partido entre Clientes/Familia.
+  // Select/3-Pack NO entran aquí — cada pedido es de una sola fruta, ya se
+  // clasifica bien fila por fila (ver PRODUCTOS_MULTIFRUTA).
   var totalesPorPaquete = {};
   tablaCompleta.forEach(function(f){
-    if (GRUPOS_PAQUETE_BERRIES.indexOf(f.nombreComercial) === -1) return;
+    if (PRODUCTOS_MULTIFRUTA.indexOf(f.nombreComercial) === -1) return;
     if (!totalesPorPaquete[f.nombreComercial]) totalesPorPaquete[f.nombreComercial] = { importe:0, costo:0 };
     totalesPorPaquete[f.nombreComercial].importe += f.importe;
     totalesPorPaquete[f.nombreComercial].costo += f.costo;
   });
   function esVentaFamiliar(f) {
-    if (GRUPOS_PAQUETE_BERRIES.indexOf(f.nombreComercial) !== -1) {
+    if (PRODUCTOS_MULTIFRUTA.indexOf(f.nombreComercial) !== -1) {
       var t = totalesPorPaquete[f.nombreComercial];
       return !!t && t.importe > 0 && t.importe <= t.costo * 1.01;
     }
@@ -906,12 +913,17 @@ function renderTablero() {
   // Higo, Cherry, Elote, Pulpas, Mercado) conserva el agrupado por fruta de
   // siempre — Fresa suelta es distinta de Fresa-dentro-de-Max, así que
   // conservan agrupados separados.
+  // Lista de agrupación visual (distinta de PRODUCTOS_MULTIFRUTA, que es
+  // para el reparto de precio) — aquí sí van los 4, porque Select/3-Pack
+  // también deben agruparse por producto y desglosarse por fruta en el
+  // reporte, aunque su precio no necesite repartirse.
+  var PRODUCTOS_PAQUETE_BERRIES = ["Ludo Berry 3-Pack","Ludo Berry Select","Ludo Berry Mix","Ludo Berry Max"];
   var GRUPO_BOTE_DIRECTO = "Vendido en bote";
   function esGrupoPaquete(nombreGrupo) {
-    return GRUPOS_PAQUETE_BERRIES.indexOf(nombreGrupo) !== -1 || nombreGrupo === GRUPO_BOTE_DIRECTO;
+    return PRODUCTOS_PAQUETE_BERRIES.indexOf(nombreGrupo) !== -1 || nombreGrupo === GRUPO_BOTE_DIRECTO;
   }
   function grupoDeFila(f) {
-    if (GRUPOS_PAQUETE_BERRIES.indexOf(f.nombreComercial) !== -1) return f.nombreComercial;
+    if (PRODUCTOS_PAQUETE_BERRIES.indexOf(f.nombreComercial) !== -1) return f.nombreComercial;
     if (f.presentacion === "bote" && FRUTAS.indexOf(f.fruta) !== -1) return GRUPO_BOTE_DIRECTO;
     return f.fruta;
   }

@@ -326,8 +326,14 @@ function calcularKPIsGlobal(datos) {
   var porPresentacion = calcularUtilidadPorPresentacion(datos);
   var clientesSet = {};
   var porUbicacion = {};
+  // "Pedidos" = checkouts distintos, no líneas de producto — el Sheet no
+  // tiene un ID de pedido único, así que se agrupa por cliente+fecha
+  // (mismo cliente el mismo día = un solo checkout, aunque haya pedido
+  // varios productos en líneas separadas).
+  var checkoutsSet = {};
   datos.forEach(function(r){
     clientesSet[r[2]] = true;
+    checkoutsSet[r[2] + "||" + fmtFecha(r[6])] = true;
     var u = r[10] || "Sin ubicación";
     porUbicacion[u] = (porUbicacion[u]||0) + (parseFloat(r[4])||0);
   });
@@ -339,7 +345,7 @@ function calcularKPIsGlobal(datos) {
     productosVendidos: productosVendidos,
     porPresentacion: porPresentacion,
     numClientes: Object.keys(clientesSet).length,
-    numPedidos: datos.length,
+    numPedidos: Object.keys(checkoutsSet).length,
     numFechas: Object.keys(porFecha).length,
     porUbicacion: porUbicacion
   };
@@ -801,6 +807,26 @@ function kpiCardDesglose(label, val, cls, cliente, familia) {
     '</div>'+
   '</div>';
 }
+// Ticket promedio por checkout (ver numPedidos en calcularKPIsGlobal),
+// desglosado en venta/utilidad/% ganancia — cuánto deja en promedio cada
+// compra completa, no cada línea de producto.
+function kpiCardTicket(ventaProm, utilidadProm, pctProm, ventaPorDia, utilidadPorDia) {
+  var colorUtil = utilidadProm < 0 ? "#ff7070" : "#a8e6a3";
+  var colorPct = pctProm < 0 ? "#ff7070" : "#a8e6a3";
+  var colorUtilDia = utilidadPorDia < 0 ? "#ff7070" : "#a8e6a3";
+  return '<div class="kpi-card"><div class="kpi-label">TICKET PROMEDIO — POR PEDIDO</div>'+
+    '<div style="display:flex;gap:12px">'+
+      '<div style="flex:1"><div style="font-size:9px;color:#6b9e6b;letter-spacing:1px;margin-bottom:2px">VENTA</div><div style="font-size:19px;font-weight:bold;color:#a8e6a3">$'+fmtMoney(ventaProm)+'</div></div>'+
+      '<div style="flex:1"><div style="font-size:9px;color:#6b9e6b;letter-spacing:1px;margin-bottom:2px">UTILIDAD</div><div style="font-size:19px;font-weight:bold;color:'+colorUtil+'">$'+fmtMoney(utilidadProm)+'</div></div>'+
+      '<div style="flex:1"><div style="font-size:9px;color:#6b9e6b;letter-spacing:1px;margin-bottom:2px">% GANANCIA</div><div style="font-size:19px;font-weight:bold;color:'+colorPct+'">'+pctProm.toFixed(0)+'%</div></div>'+
+    '</div>'+
+    '<div style="font-size:9px;color:#6b9e6b;letter-spacing:1px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(168,230,163,0.12)">PROMEDIO — POR DÍA CON ENTREGA</div>'+
+    '<div style="display:flex;gap:12px;margin-top:6px">'+
+      '<div style="flex:1"><div style="font-size:9px;color:#6b9e6b;letter-spacing:1px;margin-bottom:2px">VENTA</div><div style="font-size:19px;font-weight:bold;color:#a8e6a3">$'+fmtMoney(ventaPorDia)+'</div></div>'+
+      '<div style="flex:1"><div style="font-size:9px;color:#6b9e6b;letter-spacing:1px;margin-bottom:2px">UTILIDAD</div><div style="font-size:19px;font-weight:bold;color:'+colorUtilDia+'">$'+fmtMoney(utilidadPorDia)+'</div></div>'+
+    '</div>'+
+  '</div>';
+}
 function kpiMini(label, val) {
   return '<div class="kpi-mini"><div class="kpi-mini-label">'+label+'</div><div class="kpi-mini-val">'+val+'</div></div>';
 }
@@ -851,6 +877,16 @@ function renderTablero() {
   var html = "";
   html += '<p class="kpi-rango">'+rangoLabel+'</p>';
 
+  // Ticket promedio = por checkout (numPedidos, ver calcularKPIsGlobal), no
+  // por línea de producto — cuánto deja en promedio cada compra completa.
+  var ticketVenta = k.numPedidos > 0 ? k.ventasTotales / k.numPedidos : 0;
+  var ticketUtilidad = k.numPedidos > 0 ? k.utilidadNeta / k.numPedidos : 0;
+  var ticketPct = k.ventasTotales > 0 ? (k.utilidadNeta / k.ventasTotales * 100) : 0;
+  // Promedio por DÍA de entrega (numFechas) — cuánto deja en promedio cada
+  // fecha que tuvo entregas, sin importar cuántos pedidos cayeron ese día.
+  var ventaPorDia = k.numFechas > 0 ? k.ventasTotales / k.numFechas : 0;
+  var utilidadPorDia = k.numFechas > 0 ? k.utilidadNeta / k.numFechas : 0;
+
   html += '<div class="kpi-grid">';
   html += kpiCardDesglose("VENTAS TOTALES", "$"+fmtMoney(k.ventasTotales), "", cliKPI.ventas, famKPI.ventas);
   html += kpiCardDesglose("PAGO A PROVEEDOR", "$"+fmtMoney(k.pagoProveedorTotal), "naranja", cliKPI.costo, famKPI.costo);
@@ -863,6 +899,8 @@ function renderTablero() {
   html += kpiMini("CLIENTES", k.numClientes);
   html += kpiMini("DÍAS C/ENTREGA", k.numFechas);
   html += '</div>';
+
+  html += kpiCardTicket(ticketVenta, ticketUtilidad, ticketPct, ventaPorDia, utilidadPorDia);
 
   html += renderGraficaVentas(datos);
 

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel 🫐</title>
-<script src="config.js?v=20260819c"></script>
+<script src="config.js?v=20260819f"></script>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { min-height:100vh; background:linear-gradient(160deg,#0b1a0b 0%,#132613 60%,#0b1a0b 100%); font-family:Georgia,serif; color:#e8f5e8; display:flex; flex-direction:column; align-items:center; padding:24px 16px 40px; }
@@ -199,9 +199,9 @@ var expandido = null;
 var periodoAgrupacion = "semana"; // "semana" | "mes" — para la gráfica de Tablero
 var casasExpandido = {}; // { ubicacion: true|false } — ver top 5 vs. lista completa por ubicación en "VENTAS POR CASA"
 var frutaExpandida = {}; // { fruta: true|false } — expandir/colapsar detalle de productos en "DETALLE DE VENTAS POR PRODUCTO"
-var productoExpandido = {}; // { "nombreComercial||presentacion": true|false } — expandir/colapsar desglose por fruta en la vista "Por producto"
-var ordenDetalleVentas = "alfabetico"; // "alfabetico" | "ventaDesc" | "ventaAsc" | "utilidadDesc" | "utilidadAsc"
-var vistaDetalleVentas = "fruta"; // "fruta" | "producto" — agrupar "DETALLE DE VENTAS POR PRODUCTO" por fruta o por nombre comercial
+var presentacionExpandida = {}; // { "fruta||presentacionVendida": true|false } — expandir/colapsar el desglose por producto dentro de una presentación vendida (nivel 2 de "DETALLE DE VENTAS POR PRODUCTO")
+var ordenDetalleVentas = "utilidadDesc"; // "alfabetico" | "ventaDesc" | "ventaAsc" | "utilidadDesc" | "utilidadAsc"
+var vistaDetalleVentas = "clientes"; // "clientes" | "familia" — filtra "DETALLE DE VENTAS POR PRODUCTO" a ventas a precio normal o a precio familiar/costo (ver esVentaFamiliar)
 
 document.getElementById("tabTablero").addEventListener("click",  function(){ switchTab("tablero"); });
 document.getElementById("tabResumen").addEventListener("click",  function(){ switchTab("resumen"); });
@@ -241,6 +241,16 @@ function fmtFecha(f) {
   if (!f) return "Sin fecha";
   if (typeof f==="string"&&f.includes("T")) f=f.split("T")[0];
   return f;
+}
+
+// Formatea un monto con separador de miles — $1,000 si es entero, $1,234.56
+// si tiene decimales (siempre a 2 dígitos, nunca a 1). Usar para TODO importe
+// visible en el panel en vez de "$"+x.toFixed(...) directo.
+function fmtMoney(v) {
+  v = +v || 0;
+  var redondeado = Math.round(v * 100) / 100;
+  var esEntero = Math.abs(redondeado - Math.round(redondeado)) < 1e-9;
+  return redondeado.toLocaleString("en-US", { minimumFractionDigits: esEntero ? 0 : 2, maximumFractionDigits: 2 });
 }
 
 // Devuelve la lista de fechas válidas (YYYY-MM-DD) presentes en un dataset, ordenadas asc.
@@ -337,65 +347,48 @@ function calcularKPIsGlobal(datos) {
 }
 
 /**
- * Costo real pagado al proveedor por "fruta" — mismo agrupador que usa
- * calcularTablaVentas/filasVenta — sumado sobre todas las fechas del rango.
- * Se agrupa primero por fecha exacta de entrega, igual que calcularKPIsGlobal,
- * porque el redondeo a botes/paquetes se hace por fecha, no de forma global.
- * Los productos de "otros" (sin categoría reconocida) se juntan todos bajo
- * "(sin categoría)", igual que hace filasVenta.
+ * Costo real por caja de cada fruta en CADA fecha de entrega exacta —
+ * clave "fruta||fecha", sin mezclar con otras fechas. El negocio real es
+ * "se compra ese día y se vende ese día": cada fecha de entrega es su
+ * propia compra al proveedor (con su propio redondeo a bote y su propio
+ * sobrante, si lo hay). Antes esto se pooleaba por tramo de precio o por
+ * todo el rango del reporte, lo que hacía que un sobrante sin vender de
+ * una fecha (ej. un pedido futuro que aún no se entrega) le subiera el
+ * costo a ventas de fechas anteriores que no tienen nada que ver — con
+ * esta función cada fecha carga solo lo suyo.
  */
-function calcularCostoPorFruta(datos) {
+function calcularCostoPorFrutaFecha(datos) {
   var porFecha = {};
   datos.forEach(function(r){
     var f = fmtFecha(r[6]);
     if (!porFecha[f]) porFecha[f] = [];
     porFecha[f].push(r);
   });
-  var costoPorFruta = {};
-  function suma(fruta, costo) { costoPorFruta[fruta] = (costoPorFruta[fruta] || 0) + costo; }
+  var out = {};
   Object.keys(porFecha).forEach(function(f){
     var c = calcularCompraProveedor(porFecha[f], f);
-    Object.keys(c.berries).forEach(function(fn){ suma(fn, c.berries[fn].costoProveedor); });
-    Object.keys(c.elotes).forEach(function(en){ suma(ELOTE_FRUTA[en] || en, c.elotes[en].costoTotal); });
-    Object.keys(c.piezas).forEach(function(pn){ suma(pn, c.piezas[pn].costoTotal); });
-    Object.keys(c.mercadoKg).forEach(function(mn){ suma(mn, c.mercadoKg[mn].costoTotal); });
-    Object.keys(c.huevos).forEach(function(hn){ suma("Huevo", c.huevos[hn].costoTotal); });
-    Object.keys(c.pulpas).forEach(function(sn){ suma("Pulpas", c.pulpas[sn].costoTotal); });
-    Object.keys(c.otros).forEach(function(pn){ suma("(sin categoría)", c.otros[pn].costoTotal); });
+    Object.keys(c.berries).forEach(function(fn){
+      var b = c.berries[fn];
+      if (b.cajasNecesarias > 0) out[fn + "||" + f] = b.costoProveedor / b.cajasNecesarias;
+    });
   });
-  return costoPorFruta;
+  return out;
 }
 
 /**
  * Venta, costo y utilidad agrupados por presentación (bote/clamshell/charola/kg/pieza).
- * El costo de una fruta que se compra por bote solo se conoce agrupado por fruta (el
- * redondeo a botes usa la demanda combinada de bote+clamshell, ver calcularCompraProveedor),
- * así que ese costo se reparte entre las líneas de cada fruta proporcional a cajas
- * consumidas — mismo criterio que ya usa la tabla de detalle de ventas.
+ * El costo de cada línea ya viene resuelto con precisión de fecha desde
+ * calcularTablaVentas (ver calcularCostoPorFrutaFecha), así que aquí solo
+ * se suma — sin ningún pooleo adicional.
  */
 function calcularUtilidadPorPresentacion(datos) {
   var tabla = calcularTablaVentas(datos);
-  var costoPorFruta = calcularCostoPorFruta(datos);
-  var porFruta = {};
-  tabla.forEach(function(f){
-    if (!porFruta[f.fruta]) porFruta[f.fruta] = { costoConocido:0, cajasDesconocidas:0 };
-    porFruta[f.fruta].costoConocido += f.costoConocido;
-    porFruta[f.fruta].cajasDesconocidas += f.cajasDesconocidas;
-  });
-  var costoPorCajaPorFruta = {};
-  Object.keys(porFruta).forEach(function(fr){
-    var g = porFruta[fr];
-    var costoTotal = costoPorFruta[fr] || 0;
-    costoPorCajaPorFruta[fr] = g.cajasDesconocidas > 0 ? (costoTotal - g.costoConocido) / g.cajasDesconocidas : 0;
-  });
-
   var porPresentacion = {};
   tabla.forEach(function(f){
     if (!porPresentacion[f.presentacion]) porPresentacion[f.presentacion] = { cantidad:0, venta:0, costo:0 };
-    var costoFila = f.costoConocido + f.cajasDesconocidas * (costoPorCajaPorFruta[f.fruta] || 0);
     porPresentacion[f.presentacion].cantidad += f.cantidad;
     porPresentacion[f.presentacion].venta += f.importe;
-    porPresentacion[f.presentacion].costo += costoFila;
+    porPresentacion[f.presentacion].costo += f.costo;
   });
   Object.keys(porPresentacion).forEach(function(p){
     porPresentacion[p].utilidad = porPresentacion[p].venta - porPresentacion[p].costo;
@@ -430,10 +423,20 @@ var ELOTE_NOMBRE_COMERCIAL = { "Elote amarillo":"Elote Select", "Elote Select":"
 // Además de fruta/nombreComercial/presentacion/cantidad/importe, cada fila trae:
 //   costo: costo real exacto de esa línea (elotes, piezas, kg y berries por
 //          clamshell son deterministos, sin redondeo) — o null si el costo
-//          solo se conoce agrupando por bote/fecha (ver calcularCostoPorFruta).
+//          solo se conoce agrupando por bote/fecha (ver calcularCostoPorFrutaFecha).
 //   cajas: unidades tipo-clamshell aportadas (1 bote = CAJAS_POR_BOTE cajas),
 //          solo relevante cuando costo es null, para repartir el costo pooled
 //          de la fruta proporcional a cajas consumidas (no a venta en pesos).
+//   costoVigenteDesde: fecha ("YYYY-MM-DD") del tramo de precio de proveedor
+//          activo en la fecha de este pedido — permite que calcularTablaVentas
+//          separe en filas distintas ventas que cayeron en tramos de costo
+//          distintos (ej. blueberry comprado a $70 y luego a $80), en vez de
+//          mezclarlas en un solo costo promedio. null cuando el producto no
+//          tiene historial de costo (fila "sin categoría").
+//   fecha: fecha de entrega de este pedido ("YYYY-MM-DD" o "Sin fecha") — se
+//          usa para acumular el rango real (primer/último pedido) de cada
+//          tramo de costo en el detalle de ventas, como referencia de en qué
+//          meses del año aplicó cada costo.
 function filasVenta(r) {
   var nombreRaw = r[0] || "";
   var qty = parseFloat(r[1]) || 1;
@@ -446,87 +449,155 @@ function filasVenta(r) {
   if (!p.tipo) {
     // Sin categoría reconocida: se usa el costo ya calculado y guardado al
     // capturar el pedido (columna "subtotal costo"), igual que calcularCompraProveedor.
-    return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", cantidad:qty, importe:importeTotal, mes:mes, costo: parseFloat(r[7])||0 }];
+    var costoOtros = parseFloat(r[7])||0;
+    return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", presentacionComprada:"—", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo: costoOtros, costoVigenteDesde:null, costoVigenteHasta:null, costoUnitarioNominal: qty>0 ? costoOtros/qty : 0 }];
   }
   if (p.tipo === "elote") {
     var en = p.frutas[0];
-    var costoElote = qty * costoVigente(HIST_COSTO_ELOTE[en], fecha).costo;
-    return [{ fruta: ELOTE_FRUTA[en] || en, nombreComercial: ELOTE_NOMBRE_COMERCIAL[en] || en, presentacion:"charola", cantidad:qty, importe:importeTotal, mes:mes, costo: costoElote }];
+    var vigElote = costoVigente(HIST_COSTO_ELOTE[en], fecha);
+    var costoElote = qty * vigElote.costo;
+    return [{ fruta: ELOTE_FRUTA[en] || en, nombreComercial: ELOTE_NOMBRE_COMERCIAL[en] || en, presentacion:"charola", presentacionComprada:"charola", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo: costoElote, costoVigenteDesde: vigElote.desde, costoVigenteHasta: vigElote.hasta, costoUnitarioNominal: vigElote.costo }];
   }
   if (p.tipo === "pieza_directa") {
     var pn = p.frutas[0];
-    var costoPieza = qty * costoVigente(HIST_COSTO_PIEZA[pn], fecha).costo;
-    return [{ fruta:pn, nombreComercial:pn, presentacion:"pieza", cantidad:qty, importe:importeTotal, mes:mes, costo: costoPieza }];
+    var vigPieza = costoVigente(HIST_COSTO_PIEZA[pn], fecha);
+    var costoPieza = qty * vigPieza.costo;
+    return [{ fruta:pn, nombreComercial:pn, presentacion:"pieza", presentacionComprada:"pieza", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo: costoPieza, costoVigenteDesde: vigPieza.desde, costoVigenteHasta: vigPieza.hasta, costoUnitarioNominal: vigPieza.costo }];
   }
   if (p.tipo === "mercado_kg") {
     var mn = p.frutas[0];
     var suf = parseSufijoUnidad(nombreRaw);
     var unidadLbl = suf.unidad === "gramos" ? "gramos" : suf.unidad === "pieza" ? "pieza" : "kg";
-    var costoMercado = p.kgEquivalente * costoVigente(HIST_COSTO_PROVEEDOR_KG[mn], fecha).costo;
-    return [{ fruta:mn, nombreComercial:mn, presentacion:unidadLbl, cantidad:qty, importe:importeTotal, mes:mes, costo: costoMercado }];
+    var vigMercado = costoVigente(HIST_COSTO_PROVEEDOR_KG[mn], fecha);
+    var costoMercado = p.kgEquivalente * vigMercado.costo;
+    return [{ fruta:mn, nombreComercial:mn, presentacion:unidadLbl, presentacionComprada:"kg", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo: costoMercado, costoVigenteDesde: vigMercado.desde, costoVigenteHasta: vigMercado.hasta, costoUnitarioNominal: vigMercado.costo }];
   }
   if (p.tipo === "fruta_suelta") {
     var fn = p.frutas[0];
     var multFS = p.mult || 1;
     var esPorClamshellFS = HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn);
     var cajasFS = esPorClamshellFS ? (qty*multFS) : (qty*multFS*CAJAS_POR_BOTE);
-    var costoFS = esPorClamshellFS ? (cajasFS * costoVigente(HIST_COSTO_PROVEEDOR_CLAMSHELL[fn], fecha).costo) : null;
+    var vigFS = costoVigente(esPorClamshellFS ? HIST_COSTO_PROVEEDOR_CLAMSHELL[fn] : HIST_COSTO_PROVEEDOR[fn], fecha);
+    var costoFS = esPorClamshellFS ? (cajasFS * vigFS.costo) : null;
+    var presCompFS = esPorClamshellFS ? "clamshell" : "bote";
     if (NOMBRE_BOTE_DIRECTO[fn]) {
-      return [{ fruta:fn, nombreComercial:NOMBRE_BOTE_DIRECTO[fn], presentacion:"bote", cantidad:qty*multFS, importe:importeTotal, mes:mes, costo:costoFS, cajas:cajasFS }];
+      return [{ fruta:fn, nombreComercial:NOMBRE_BOTE_DIRECTO[fn], presentacion:"bote", presentacionComprada:presCompFS, cantidad:qty*multFS, importe:importeTotal, mes:mes, fecha:fecha, costo:costoFS, cajas:cajasFS, costoVigenteDesde: vigFS.desde, costoVigenteHasta: vigFS.hasta, costoUnitarioNominal: vigFS.costo }];
     }
     var presFS = fn === "Cereza" ? "bote" : "clamshell";
-    return [{ fruta:fn, nombreComercial:nombreRaw, presentacion:presFS, cantidad:qty*multFS, importe:importeTotal, mes:mes, costo:costoFS, cajas:cajasFS }];
+    return [{ fruta:fn, nombreComercial:nombreRaw, presentacion:presFS, presentacionComprada:presCompFS, cantidad:qty*multFS, importe:importeTotal, mes:mes, fecha:fecha, costo:costoFS, cajas:cajasFS, costoVigenteDesde: vigFS.desde, costoVigenteHasta: vigFS.hasta, costoUnitarioNominal: vigFS.costo }];
   }
   if (p.tipo === "clamshell") {
     var nomC = normalizarProducto(nombreRaw.split("·")[0].trim());
     var multC = p.mult || 1;
     var frutasC = p.frutas.filter(Boolean);
-    if (!frutasC.length) return [{ fruta:"(sin fruta)", nombreComercial:nomC, presentacion:"clamshell", cantidad:qty*multC, importe:importeTotal, mes:mes, costo:0 }];
+    if (!frutasC.length) return [{ fruta:"(sin fruta)", nombreComercial:nomC, presentacion:"clamshell", presentacionComprada:"—", cantidad:qty*multC, importe:importeTotal, mes:mes, fecha:fecha, costo:0, costoVigenteDesde:null, costoVigenteHasta:null, costoUnitarioNominal:0 }];
     var importeC = importeTotal / frutasC.length;
     return frutasC.map(function(fn){
       var cajasC = qty*multC;
       var esPorClamshellC = HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn);
-      var costoC = esPorClamshellC ? (cajasC * costoVigente(HIST_COSTO_PROVEEDOR_CLAMSHELL[fn], fecha).costo) : null;
-      return { fruta:fn, nombreComercial:nomC, presentacion:"clamshell", cantidad:cajasC, importe:importeC, mes:mes, costo:costoC, cajas:cajasC };
+      var vigC = costoVigente(esPorClamshellC ? HIST_COSTO_PROVEEDOR_CLAMSHELL[fn] : HIST_COSTO_PROVEEDOR[fn], fecha);
+      var costoC = esPorClamshellC ? (cajasC * vigC.costo) : null;
+      return { fruta:fn, nombreComercial:nomC, presentacion:"clamshell", presentacionComprada: esPorClamshellC ? "clamshell" : "bote", cantidad:cajasC, importe:importeC, mes:mes, fecha:fecha, costo:costoC, cajas:cajasC, costoVigenteDesde: vigC.desde, costoVigenteHasta: vigC.hasta, costoUnitarioNominal: vigC.costo };
     });
   }
   if (p.tipo === "familiar") {
     var nomF = nombreRaw.split("·")[0].trim();
     var frutasF = p.frutas.filter(Boolean);
-    if (!frutasF.length) return [{ fruta:"(sin fruta)", nombreComercial:nomF, presentacion:"bote", cantidad:qty, importe:importeTotal, mes:mes, costo:0 }];
+    if (!frutasF.length) return [{ fruta:"(sin fruta)", nombreComercial:nomF, presentacion:"bote", presentacionComprada:"—", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo:0, costoVigenteDesde:null, costoVigenteHasta:null, costoUnitarioNominal:0 }];
     var importeF = importeTotal / frutasF.length;
     return frutasF.map(function(fn){
-      return { fruta:fn, nombreComercial:nomF, presentacion:"bote", cantidad:qty, importe:importeF, mes:mes, costo:null, cajas:qty*CAJAS_POR_BOTE };
+      var vigF = costoVigente(HIST_COSTO_PROVEEDOR[fn], fecha);
+      return { fruta:fn, nombreComercial:nomF, presentacion:"bote", presentacionComprada:"bote", cantidad:qty, importe:importeF, mes:mes, fecha:fecha, costo:null, cajas:qty*CAJAS_POR_BOTE, costoVigenteDesde: vigF.desde, costoVigenteHasta: vigF.hasta, costoUnitarioNominal: vigF.costo };
     });
   }
   if (p.tipo === "huevo") {
     var hn2 = p.frutas[0];
-    var costoHuevo = qty * costoVigente(HIST_COSTO_HUEVO[hn2], fecha).costo;
-    return [{ fruta:"Huevo", nombreComercial:hn2, presentacion:"caja", cantidad:qty, importe:importeTotal, mes:mes, costo: costoHuevo }];
+    var vigHuevo = costoVigente(HIST_COSTO_HUEVO[hn2], fecha);
+    var costoHuevo = qty * vigHuevo.costo;
+    return [{ fruta:"Huevo", nombreComercial:hn2, presentacion:"caja", presentacionComprada:"caja", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo: costoHuevo, costoVigenteDesde: vigHuevo.desde, costoVigenteHasta: vigHuevo.hasta, costoUnitarioNominal: vigHuevo.costo }];
   }
   if (p.tipo === "pulpa") {
     var sn2 = p.frutas[0];
-    var costoPulpa = qty * costoVigente(HIST_COSTO_PULPA["Concentrado de Pulpas"], fecha).costo;
-    return [{ fruta:"Pulpas", nombreComercial:sn2, presentacion:"concentrado", cantidad:qty, importe:importeTotal, mes:mes, costo: costoPulpa }];
+    var vigPulpaFila = costoVigente(HIST_COSTO_PULPA["Concentrado de Pulpas"], fecha);
+    var costoPulpa = qty * vigPulpaFila.costo;
+    return [{ fruta:"Pulpas", nombreComercial:sn2, presentacion:"concentrado", presentacionComprada:"concentrado", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo: costoPulpa, costoVigenteDesde: vigPulpaFila.desde, costoVigenteHasta: vigPulpaFila.hasta, costoUnitarioNominal: vigPulpaFila.costo }];
   }
-  return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", cantidad:qty, importe:importeTotal, mes:mes, costo: parseFloat(r[7])||0 }];
+  var costoSinCat = parseFloat(r[7])||0;
+  return [{ fruta:"(sin categoría)", nombreComercial:nombreRaw, presentacion:"—", presentacionComprada:"—", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo: costoSinCat, costoVigenteDesde:null, costoVigenteHasta:null, costoUnitarioNominal: qty>0 ? costoSinCat/qty : 0 }];
 }
 
 function calcularTablaVentas(datos) {
-  var filas = {}; // key "fruta||nombreComercial||presentacion" -> {fruta,nombreComercial,presentacion,cantidad,importe,costoConocido,cajasDesconocidas}
+  // key "fruta||nombreComercial||presentacion||costoVigenteDesde||precioVenta" ->
+  //   {fruta,nombreComercial,presentacion,costoVigenteDesde,precioVenta,cantidad,importe,costo,clientes}
+  // Separar también por costoVigenteDesde hace que, si el proveedor cambió de
+  // precio dentro del rango del reporte, las ventas de cada tramo aparezcan
+  // como filas distintas en vez de mezclarse en un costo/margen promediado.
+  // Separar también por precioVenta (precio unitario cobrado) hace lo mismo
+  // pero del lado de la venta: si el mismo producto se vendió a distintos
+  // clientes a distintos precios (ej. precio normal vs precio familiar/costo),
+  // cada precio queda en su propia fila en vez de un precio promedio.
+  // El costo de cada fila se resuelve YA con precisión de fecha (ver
+  // calcularCostoPorFrutaFecha) — nunca se mezcla el sobrante de una fecha
+  // con la venta de otra fecha distinta.
+  var costoPorFrutaFecha = calcularCostoPorFrutaFecha(datos);
+  var filas = {};
   datos.forEach(function(r) {
     filasVenta(r).forEach(function(f){
-      var key = f.fruta + "||" + f.nombreComercial + "||" + f.presentacion;
-      if (!filas[key]) filas[key] = { fruta:f.fruta, nombreComercial:f.nombreComercial, presentacion:f.presentacion, cantidad:0, importe:0, costoConocido:0, cajasDesconocidas:0 };
+      var precioVenta = f.cantidad > 0 ? Math.round((f.importe / f.cantidad) * 100) / 100 : 0;
+      var key = f.fruta + "||" + f.nombreComercial + "||" + f.presentacion + "||" + (f.costoVigenteDesde || "") + "||" + precioVenta;
+      if (!filas[key]) filas[key] = { fruta:f.fruta, nombreComercial:f.nombreComercial, presentacion:f.presentacion, presentacionComprada:f.presentacionComprada, costoUnitarioNominal:f.costoUnitarioNominal, costoVigenteDesde:f.costoVigenteDesde, costoVigenteHasta:f.costoVigenteHasta, precioVenta:precioVenta, cantidad:0, importe:0, costo:0, fechaMin:null, fechaMax:null };
       filas[key].cantidad += f.cantidad;
       filas[key].importe += f.importe;
-      if (f.costo != null) filas[key].costoConocido += f.costo;
-      else filas[key].cajasDesconocidas += (f.cajas || 0);
+      if (f.costo != null) {
+        filas[key].costo += f.costo;
+      } else {
+        var rate = costoPorFrutaFecha[f.fruta + "||" + f.fecha] || 0;
+        filas[key].costo += (f.cajas || 0) * rate;
+      }
+      // Rango real (primer/último pedido) de esta fila — referencia de en qué
+      // meses del año aplicó este costo, útil para planear el año siguiente.
+      if (f.fecha && f.fecha !== "Sin fecha") {
+        if (!filas[key].fechaMin || f.fecha < filas[key].fechaMin) filas[key].fechaMin = f.fecha;
+        if (!filas[key].fechaMax || f.fecha > filas[key].fechaMax) filas[key].fechaMax = f.fecha;
+      }
     });
+  });
+  // cantidadComprada: se deriva de costo ÷ costoUnitarioNominal — cuánto se le
+  // "compró" al proveedor en unidades de presentacionComprada para cubrir esta
+  // fila. Cuando hay sobrante sin vender ese día (merma), el costo real ya lo
+  // incluye, así que cantidadComprada sale más alta que lo que cantidad
+  // vendida "debería" representar — eso es intencional: hace visible el
+  // sobrante directamente en la tabla, sin tener que ir a preguntar.
+  Object.values(filas).forEach(function(f){
+    f.cantidadComprada = f.costoUnitarioNominal > 0 ? f.costo / f.costoUnitarioNominal : null;
   });
   return Object.values(filas).sort(function(a,b){
     return a.fruta === b.fruta ? a.nombreComercial.localeCompare(b.nombreComercial) : a.fruta.localeCompare(b.fruta);
   });
+}
+
+// Formatea una fecha "YYYY-MM-DD" como "5 jun '26".
+function fmtFechaCorta(f) {
+  var meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  var partes = f.split("-");
+  return parseInt(partes[2],10) + " " + meses[parseInt(partes[1],10)-1] + " '" + partes[0].slice(2);
+}
+// Rango "5 jun '26 – 12 ago '26" (o una sola fecha si min===max) — el periodo
+// real en que se vendió cada fila del detalle de ventas, como referencia de
+// qué meses cubrió cada costo (útil para planear/negociar el año siguiente).
+function fmtRangoFechas(fechaMin, fechaMax) {
+  if (!fechaMin || !fechaMax) return "";
+  if (fechaMin === fechaMax) return fmtFechaCorta(fechaMin);
+  return fmtFechaCorta(fechaMin) + " – " + fmtFechaCorta(fechaMax);
+}
+// Rango de vigencia de un tramo de costo — "8 jun '26 – 7 jul '26" o, si es
+// el tramo vigente actual (sin tramo siguiente en config.js), "8 jun '26 –
+// a la fecha". A diferencia de fmtRangoFechas (que usa fechas de pedidos
+// reales), este usa las fechas DECLARADAS en config.js — es el rango exacto
+// en que ese costo aplicó, exista o no un pedido justo en esos límites.
+function fmtRangoVigencia(desde, hasta) {
+  if (!desde) return "";
+  return fmtFechaCorta(desde) + " – " + (hasta ? fmtFechaCorta(hasta) : "a la fecha");
 }
 
 /**
@@ -630,7 +701,7 @@ function kpiCardPresentacion(label, porPresentacion) {
     var esPerdida = d.utilidad < 0;
     return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;line-height:1.6">'+
       '<span style="font-size:15px;font-weight:bold;color:#e8f5e8;white-space:nowrap">'+v+' <span style="font-size:11px;color:#6b9e6b;font-weight:normal">'+p+'</span></span>'+
-      '<span style="font-size:12px;font-weight:bold;color:'+(esPerdida?'#ff7070':'#a8e6a3')+';white-space:nowrap">'+(d.utilidad>=0?'+':'−')+'$'+Math.round(Math.abs(d.utilidad))+'</span>'+
+      '<span style="font-size:12px;font-weight:bold;color:'+(esPerdida?'#ff7070':'#a8e6a3')+';white-space:nowrap">'+(d.utilidad>=0?'+':'−')+'$'+fmtMoney(Math.abs(d.utilidad))+'</span>'+
     '</div>';
   }).join("");
   return '<div class="kpi-card"><div class="kpi-label">'+label+'</div>'+(body||'<div class="kpi-val">0</div>')+'</div>';
@@ -661,9 +732,9 @@ function renderTablero() {
   html += '<p class="kpi-rango">'+rangoLabel+'</p>';
 
   html += '<div class="kpi-grid">';
-  html += kpiCard("VENTAS TOTALES", "$"+k.ventasTotales.toFixed(0));
-  html += kpiCard("PAGO A PROVEEDOR", "$"+k.pagoProveedorTotal.toFixed(0), "naranja");
-  html += kpiCard("UTILIDAD NETA", "$"+k.utilidadNeta.toFixed(0), k.utilidadNeta<0 ? "rojo" : "");
+  html += kpiCard("VENTAS TOTALES", "$"+fmtMoney(k.ventasTotales));
+  html += kpiCard("PAGO A PROVEEDOR", "$"+fmtMoney(k.pagoProveedorTotal), "naranja");
+  html += kpiCard("UTILIDAD NETA", "$"+fmtMoney(k.utilidadNeta), k.utilidadNeta<0 ? "rojo" : "");
   html += kpiCardPresentacion("PRODUCTOS VENDIDOS", k.porPresentacion);
   html += '</div>';
 
@@ -684,7 +755,7 @@ function renderTablero() {
       html += '<div class="cliente-bar-row">'+
         '<span class="cliente-bar-name">'+u[0]+'</span>'+
         '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%"></div></div>'+
-        '<span class="cliente-bar-grams">$'+u[1].toFixed(0)+'</span>'+
+        '<span class="cliente-bar-grams">$'+fmtMoney(u[1])+'</span>'+
       '</div>';
     });
     html += '</div>';
@@ -712,42 +783,112 @@ function renderTablero() {
       html += '<div class="cliente-bar-row">'+
         '<span class="cliente-bar-name">'+c[0]+'</span>'+
         '<div class="cliente-bar-track"><div class="cliente-bar-fill" style="width:'+pct+'%"></div></div>'+
-        '<span class="cliente-bar-grams">$'+c[1].toFixed(0)+'</span>'+
+        '<span class="cliente-bar-grams">$'+fmtMoney(c[1])+'</span>'+
       '</div>';
     });
     html += '</div>';
   });
 
   // ── Detalle de ventas por producto (fruta · nombre comercial · presentación) ──
-  // Agrupado por fruta (colapsado por default). El costo de cada producto es
-  // exacto cuando es determinístico (elotes, piezas, kg, berries por clamshell
-  // individual — sin redondeo a bote). Las berries que se compran por bote
-  // completo (Zarzamora/Frambuesa/Blueberry/Cereza cuando no vienen en Ludo
-  // Pack/Select/Individual) solo se conocen agrupadas por fecha — ver
-  // calcularCostoPorFruta — así que ese remanente se reparte entre esas líneas
-  // proporcional a cajas consumidas (no a venta en pesos, que mezclaría
-  // productos con márgenes distintos). El subtotal por fruta siempre es exacto.
-  var tabla = calcularTablaVentas(datos);
+  // Agrupado por fruta (colapsado por default). El costo de cada línea ya
+  // viene resuelto con precisión de fecha desde calcularTablaVentas (ver
+  // calcularCostoPorFrutaFecha) — cada fecha de entrega carga solo su propio
+  // redondeo a bote, nunca el de otra fecha. El subtotal por fruta es exacto.
+  //
+  // La tabla se filtra en dos pestañas — "Clientes" (precio normal) y
+  // "Familia" (precio de costo/familiar) — en vez de mezclarlas: una venta a
+  // precio familiar tiene margen ~0 por diseño (es una cortesía, no un error
+  // de precio), así que mezclarla con ventas normales solo diluye el margen
+  // real del negocio sin decir nada útil. No hay una columna que marque
+  // "esto se vendió a precio familiar" en el Sheet, así que se infiere
+  // comparando el precio unitario vendido contra el costo nominal por esa
+  // misma unidad (bote/clamshell/etc, ver presentacionComprada) — si el
+  // cliente pagó al costo (o menos, con 1% de tolerancia por redondeo), es
+  // familia; si pagó más (el caso normal, con margen), es cliente.
+  // Costo unitario en unidades de la presentación VENDIDA, no de la comprada.
+  // El proveedor cobra por bote, pero si ese bote se vendió repartido en
+  // clamshells (ej. Ludo Berry Select), comparar el precio de venta contra
+  // el costo del bote completo no dice nada — hay que comparar contra lo que
+  // costó CADA clamshell: costo del bote ÷ 3 (CAJAS_POR_BOTE). Ej. bote a
+  // $80 vendido en clamshells → $80/3 = $26.66 por clamshell.
+  function costoUnitarioPorVendida(f) {
+    if (!f.costoUnitarioNominal) return 0;
+    var factor = (f.presentacionComprada === f.presentacion) ? 1 : CAJAS_POR_BOTE;
+    return f.costoUnitarioNominal / factor;
+  }
+  function esVentaFamiliar(f) {
+    var nominalPorUnidadVendida = costoUnitarioPorVendida(f);
+    return nominalPorUnidadVendida > 0 && f.precioVenta <= nominalPorUnidadVendida * 1.01;
+  }
+  var tabla = calcularTablaVentas(datos).filter(function(f){
+    return vistaDetalleVentas === "familia" ? esVentaFamiliar(f) : !esVentaFamiliar(f);
+  });
+  // Algunos tramos de costo en config.js arrancan en una fecha "sentinel"
+  // (ej. "2000-01-01") que solo significa "el costo base, desde antes de
+  // que hubiera historial" — nunca una fecha real de operación. Al mostrar
+  // el rango de vigencia se recorta al primer pedido real del negocio
+  // (kpiData completo, sin importar el filtro de fechas activo), para que
+  // nunca aparezca una fecha fuera de la ventana real de operaciones.
+  var inicioOperaciones = fechasValidas(kpiData)[0] || null;
+  function costoVigenteDesdeMostrado(f) {
+    if (!f.costoVigenteDesde) return f.costoVigenteDesde;
+    if (inicioOperaciones && f.costoVigenteDesde < inicioOperaciones) return inicioOperaciones;
+    return f.costoVigenteDesde;
+  }
   if (tabla.length) {
-    var costoPorFruta = calcularCostoPorFruta(datos);
     var gruposPorFruta = {};
     tabla.forEach(function(f){
-      if (!gruposPorFruta[f.fruta]) gruposPorFruta[f.fruta] = { fruta:f.fruta, rows:[], importe:0, costoConocido:0, cajasDesconocidas:0 };
+      if (!gruposPorFruta[f.fruta]) gruposPorFruta[f.fruta] = { fruta:f.fruta, rows:[], importe:0, costo:0 };
       gruposPorFruta[f.fruta].rows.push(f);
       gruposPorFruta[f.fruta].importe += f.importe;
-      gruposPorFruta[f.fruta].costoConocido += f.costoConocido;
-      gruposPorFruta[f.fruta].cajasDesconocidas += f.cajasDesconocidas;
+      gruposPorFruta[f.fruta].costo += f.costo;
     });
+    // Cuenta tramos de costo distintos entre un conjunto de filas — si hay más
+    // de uno, se muestra la fecha de vigencia en el detalle para dejar claro
+    // por qué dos filas del mismo producto tienen costo/margen diferente.
+    function contarTiers(rows) {
+      var s = {};
+      rows.forEach(function(r){ if (r.costoVigenteDesde) s[r.costoVigenteDesde] = 1; });
+      return Object.keys(s).length;
+    }
+    // Cuenta precios de venta distintos entre un conjunto de filas — si hay
+    // más de uno, cada precio se muestra en su propia fila (con su rango de
+    // fechas debajo del precio unitario vendido).
+    function contarPrecios(rows) {
+      var s = {};
+      rows.forEach(function(r){ s[r.precioVenta] = 1; });
+      return Object.keys(s).length;
+    }
     var grupos = Object.keys(gruposPorFruta).map(function(fr){
       var g = gruposPorFruta[fr];
-      g.costo = costoPorFruta[fr] || 0;
       g.utilidad = g.importe - g.costo;
       g.pct = g.importe > 0 ? (g.utilidad / g.importe * 100) : 0;
-      g.costoPorCajaPooled = g.cajasDesconocidas > 0 ? (g.costo - g.costoConocido) / g.cajasDesconocidas : 0;
       return g;
     });
     grupos.forEach(function(g){
-      g.rows.sort(function(a,b){ return a.nombreComercial.localeCompare(b.nombreComercial); });
+      // Ordenado por utilidad $ (mayor a menor) — igual que la tabla completa,
+      // el producto que más ganancia dejó va primero, sin importar tramo de
+      // costo o precio.
+      g.rows.sort(function(a,b){ return (b.importe-b.costo) - (a.importe-a.costo); });
+      g.numProductosUnicos = Object.keys(g.rows.reduce(function(s,f){ s[f.nombreComercial+"||"+f.presentacion]=1; return s; }, {})).length;
+      // Nivel 2: agrupa por presentación VENDIDA (bote suelto vs clamshell en
+      // paquetes, etc.) — el mismo bote comprado puede terminar repartido
+      // entre varias presentaciones de venta distintas.
+      var porPres = {};
+      g.rows.forEach(function(f){
+        if (!porPres[f.presentacion]) porPres[f.presentacion] = { presentacion:f.presentacion, rows:[], importe:0, costo:0, cantidad:0 };
+        porPres[f.presentacion].rows.push(f);
+        porPres[f.presentacion].importe += f.importe;
+        porPres[f.presentacion].costo += f.costo;
+        porPres[f.presentacion].cantidad += f.cantidad;
+      });
+      g.porPresentacion = Object.keys(porPres).map(function(p){
+        var sub = porPres[p];
+        sub.utilidad = sub.importe - sub.costo;
+        sub.pct = sub.importe > 0 ? (sub.utilidad / sub.importe * 100) : 0;
+        sub.numProductosUnicos = Object.keys(sub.rows.reduce(function(s,f){ s[f.nombreComercial]=1; return s; }, {})).length;
+        return sub;
+      }).sort(function(a,b){ return b.utilidad - a.utilidad; });
     });
 
     var totalImporte = grupos.reduce(function(s,g){ return s+g.importe; },0);
@@ -765,53 +906,17 @@ function renderTablero() {
       pctAsc:       function(a,b){ return a.pct - b.pct; }
     };
 
-    // ── Vista "por producto" — agrupa las mismas filas de `tabla` por nombre
-    // comercial en vez de por fruta. Cuando un producto lleva más de una fruta
-    // (Ludo Mix/Select/Pack, Familiar 2x/3x, Cherry Mix...) el grupo se puede
-    // expandir para ver el desglose por fruta — cada una con su costo real,
-    // igual que en la vista "Por fruta". El orden (venta/utilidad mayor a
-    // menor) se aplica al grupo/encabezado, no a las filas de fruta de adentro
-    // (esas siempre quedan alfabéticas), porque ordenar cada fruta suelta no
-    // dice nada útil sobre qué tan bien vende el producto en conjunto.
-    var costoPorCajaPorFruta = {};
-    grupos.forEach(function(g){ costoPorCajaPorFruta[g.fruta] = g.costoPorCajaPooled; });
-
-    var productos = null;
-    if (vistaDetalleVentas === "producto") {
-      var gruposPorProducto = {};
-      tabla.forEach(function(f){
-        var key = f.nombreComercial + "||" + f.presentacion;
-        if (!gruposPorProducto[key]) gruposPorProducto[key] = { nombreComercial:f.nombreComercial, presentacion:f.presentacion, rows:[], importe:0 };
-        gruposPorProducto[key].rows.push(f);
-        gruposPorProducto[key].importe += f.importe;
-      });
-      productos = Object.keys(gruposPorProducto).map(function(k){
-        var p = gruposPorProducto[k];
-        p.rows.sort(function(a,b){ return a.fruta.localeCompare(b.fruta); });
-        p.costo = p.rows.reduce(function(s,f){
-          return s + f.costoConocido + f.cajasDesconocidas * (costoPorCajaPorFruta[f.fruta] || 0);
-        }, 0);
-        p.utilidad = p.importe - p.costo;
-        p.pct = p.importe > 0 ? (p.utilidad / p.importe * 100) : 0;
-        return p;
-      });
-      productos.sort(function(a,b){
-        var cmp = comparadores[ordenDetalleVentas] || comparadores.alfabetico;
-        return cmp(a, b, "nombreComercial");
-      });
-    } else {
-      grupos.sort(function(a,b){
-        var cmp = comparadores[ordenDetalleVentas] || comparadores.alfabetico;
-        return cmp(a, b, "fruta");
-      });
-    }
+    grupos.sort(function(a,b){
+      var cmp = comparadores[ordenDetalleVentas] || comparadores.alfabetico;
+      return cmp(a, b, "fruta");
+    });
 
     html += '<div class="kpi-block"><div class="kpi-block-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
       '<span>DETALLE DE VENTAS POR PRODUCTO</span>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
         '<div class="periodo-toggle">'+
-          '<button class="periodo-btn vista-toggle-btn'+(vistaDetalleVentas==="fruta"?" active":"")+'" data-vista="fruta">Por fruta</button>'+
-          '<button class="periodo-btn vista-toggle-btn'+(vistaDetalleVentas==="producto"?" active":"")+'" data-vista="producto">Por producto</button>'+
+          '<button class="periodo-btn vista-toggle-btn'+(vistaDetalleVentas==="clientes"?" active":"")+'" data-vista="clientes">Clientes</button>'+
+          '<button class="periodo-btn vista-toggle-btn'+(vistaDetalleVentas==="familia"?" active":"")+'" data-vista="familia">Familia</button>'+
         '</div>'+
         '<select id="ordenDetalleSelect" style="background:rgba(0,0,0,0.3);border:1px solid rgba(168,230,163,0.25);border-radius:8px;color:#a8e6a3;font-size:11px;padding:5px 8px;font-family:Georgia,serif">'+
           '<option value="alfabetico"'+(ordenDetalleVentas==="alfabetico"?" selected":"")+'>A-Z</option>'+
@@ -826,94 +931,79 @@ function renderTablero() {
     '</div>';
 
     html += '<div style="overflow-x:auto"><table class="cliente-table" style="white-space:nowrap"><thead><tr>'+
-      '<th>PRODUCTO</th><th>PRESENTACIÓN</th>'+
-      '<th style="text-align:right">CANT.</th><th style="text-align:right">IMPORTE</th>'+
-      '<th style="text-align:right">COSTO</th><th style="text-align:right">UTILIDAD</th><th style="text-align:right">% UTIL.</th>'+
+      '<th>PRODUCTO</th>'+
+      '<th style="text-align:right">$ UTILIDAD</th><th style="text-align:right">% UTILIDAD</th>'+
+      '<th style="text-align:right">CANT. VENDIDA</th>'+
+      '<th style="text-align:right">TOTAL VENTA</th><th style="text-align:right">PRECIO VENTA</th>'+
+      '<th style="text-align:right">COSTO TOTAL</th><th style="text-align:right">COSTO UNITARIO</th>'+
     '</tr></thead><tbody>';
 
-    if (vistaDetalleVentas === "producto") {
-      productos.forEach(function(p){
-        var utilStyleP = p.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
-        var pctP = p.importe > 0 ? (p.utilidad / p.importe * 100) : 0;
-        var key = p.nombreComercial + "||" + p.presentacion;
-        var multiFruta = p.rows.length > 1;
-        if (!multiFruta) {
-          // Una sola fruta: no hay nada que desglosar, se muestra directo.
-          html += '<tr class="cliente-row" style="cursor:default">'+
-            '<td>'+p.nombreComercial+'<div class="cliente-sub">'+p.rows[0].fruta+'</div></td>'+
-            '<td style="color:#6b9e6b">'+p.presentacion+'</td>'+
-            '<td style="text-align:right">'+(Math.round(p.rows[0].cantidad*100)/100)+'</td>'+
-            '<td style="text-align:right">$'+p.importe.toFixed(0)+'</td>'+
-            '<td style="text-align:right;color:#ffb74d">$'+p.costo.toFixed(0)+'</td>'+
-            '<td style="text-align:right;'+utilStyleP+'">$'+p.utilidad.toFixed(0)+'</td>'+
-            '<td style="text-align:right;'+utilStyleP+'">'+pctP.toFixed(0)+'%</td>'+
-          '</tr>';
-          return;
-        }
-        var abiertoP = !!productoExpandido[key];
-        html += '<tr class="cliente-row producto-group-row" data-producto="'+key.replace(/"/g,"&quot;")+'">'+
-          '<td colspan="2" style="font-weight:bold;color:#e8f5e8">'+(abiertoP?"▲":"▼")+' '+p.nombreComercial+' <span class="cliente-sub">'+p.rows.length+' frutas</span></td>'+
-          '<td style="text-align:right;color:#6b9e6b">—</td>'+
-          '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+p.importe.toFixed(0)+'</td>'+
-          '<td style="text-align:right;color:#ffb74d">$'+p.costo.toFixed(0)+'</td>'+
-          '<td style="text-align:right;font-weight:bold;'+utilStyleP+'">$'+p.utilidad.toFixed(0)+'</td>'+
-          '<td style="text-align:right;font-weight:bold;'+utilStyleP+'">'+pctP.toFixed(0)+'%</td>'+
-        '</tr>';
-        if (abiertoP) {
-          p.rows.forEach(function(f){
-            var costoFila = f.costoConocido + f.cajasDesconocidas * (costoPorCajaPorFruta[f.fruta] || 0);
-            var utilFila = f.importe - costoFila;
-            var pctFila = f.importe > 0 ? (utilFila / f.importe * 100) : 0;
-            html += '<tr class="detail-row">'+
-              '<td>'+f.fruta+'</td>'+
-              '<td style="color:#6b9e6b">'+p.presentacion+'</td>'+
-              '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
-              '<td style="text-align:right">$'+f.importe.toFixed(0)+'</td>'+
-              '<td style="text-align:right;color:#ffb74d">$'+costoFila.toFixed(0)+'</td>'+
-              '<td style="text-align:right">$'+utilFila.toFixed(0)+'</td>'+
-              '<td style="text-align:right">'+pctFila.toFixed(0)+'%</td>'+
-            '</tr>';
-          });
-        }
-      });
-    } else {
-      grupos.forEach(function(g){
+    grupos.forEach(function(g){
         var abierto = !!frutaExpandida[g.fruta];
         var utilStyle = g.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
         var pctGrupo = g.importe > 0 ? (g.utilidad / g.importe * 100) : 0;
+        var numTiersG = contarTiers(g.rows);
+        var numPreciosG = contarPrecios(g.rows);
+        var etiquetasG = [g.numProductosUnicos+' producto'+(g.numProductosUnicos!==1?"s":"")];
+        if (numTiersG > 1) etiquetasG.push(numTiersG+' costos');
+        if (numPreciosG > 1) etiquetasG.push(numPreciosG+' precios');
         html += '<tr class="cliente-row fruta-group-row" data-fruta="'+g.fruta.replace(/"/g,"&quot;")+'">'+
-          '<td colspan="2" style="font-weight:bold;color:#e8f5e8">'+(abierto?"▲":"▼")+' '+g.fruta+' <span class="cliente-sub">'+g.rows.length+' producto'+(g.rows.length!==1?"s":"")+'</span></td>'+
-          '<td style="text-align:right;color:#6b9e6b">—</td>'+
-          '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+g.importe.toFixed(0)+'</td>'+
-          '<td style="text-align:right;color:#ffb74d">$'+g.costo.toFixed(0)+'</td>'+
-          '<td style="text-align:right;font-weight:bold;'+utilStyle+'">$'+g.utilidad.toFixed(0)+'</td>'+
+          '<td style="font-weight:bold;color:#e8f5e8">'+(abierto?"▲":"▼")+' '+g.fruta+' <span class="cliente-sub">'+etiquetasG.join(' · ')+'</span></td>'+
+          '<td style="text-align:right;font-weight:bold;'+utilStyle+'">$'+fmtMoney(g.utilidad)+'</td>'+
           '<td style="text-align:right;font-weight:bold;'+utilStyle+'">'+pctGrupo.toFixed(0)+'%</td>'+
+          '<td style="text-align:right;color:#6b9e6b">—</td>'+
+          '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+fmtMoney(g.importe)+'</td>'+
+          '<td style="text-align:right;color:#6b9e6b">—</td>'+
+          '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(g.costo)+'</td>'+
+          '<td style="text-align:right;color:#6b9e6b">—</td>'+
         '</tr>';
         if (abierto) {
-          g.rows.forEach(function(f){
-            var costoFila = f.costoConocido + f.cajasDesconocidas * g.costoPorCajaPooled;
-            var utilFila = f.importe - costoFila;
-            var pctFila = f.importe > 0 ? (utilFila / f.importe * 100) : 0;
-            html += '<tr class="detail-row">'+
-              '<td>'+f.nombreComercial+'</td>'+
-              '<td style="color:#6b9e6b">'+f.presentacion+'</td>'+
-              '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
-              '<td style="text-align:right">$'+f.importe.toFixed(0)+'</td>'+
-              '<td style="text-align:right;color:#ffb74d">$'+costoFila.toFixed(0)+'</td>'+
-              '<td style="text-align:right">$'+utilFila.toFixed(0)+'</td>'+
-              '<td style="text-align:right">'+pctFila.toFixed(0)+'%</td>'+
+          g.porPresentacion.forEach(function(sub){
+            var subKey = g.fruta + "||" + sub.presentacion;
+            var subAbierto = !!presentacionExpandida[subKey];
+            var utilStyleSub = sub.utilidad < 0 ? "color:#ff7070" : "color:#a8e6a3";
+            html += '<tr class="cliente-row presentacion-group-row" data-presentacion="'+subKey.replace(/"/g,"&quot;")+'" style="background:rgba(0,0,0,0.12)">'+
+              '<td style="padding-left:24px">'+(subAbierto?"▲":"▼")+' vendido en <b>'+sub.presentacion+'</b> <span class="cliente-sub">'+sub.numProductosUnicos+' producto'+(sub.numProductosUnicos!==1?"s":"")+'</span></td>'+
+              '<td style="text-align:right;'+utilStyleSub+'">$'+fmtMoney(sub.utilidad)+'</td>'+
+              '<td style="text-align:right;'+utilStyleSub+'">'+sub.pct.toFixed(0)+'%</td>'+
+              '<td style="text-align:right">'+(Math.round(sub.cantidad*100)/100)+'</td>'+
+              '<td style="text-align:right">$'+fmtMoney(sub.importe)+'</td>'+
+              '<td style="text-align:right;color:#6b9e6b">—</td>'+
+              '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(sub.costo)+'</td>'+
+              '<td style="text-align:right;color:#6b9e6b">—</td>'+
             '</tr>';
+            if (subAbierto) {
+              sub.rows.forEach(function(f){
+                var costoFila = f.costo;
+                var utilFila = f.importe - costoFila;
+                var pctFila = f.importe > 0 ? (utilFila / f.importe * 100) : 0;
+                var precioUnitFilaG = f.cantidad > 0 ? f.importe / f.cantidad : 0;
+                var utilStyleFila = utilFila < 0 ? "color:#ff7070" : "color:#a8e6a3";
+                html += '<tr class="detail-row">'+
+                  '<td style="padding-left:40px">'+f.nombreComercial+'</td>'+
+                  '<td style="text-align:right;'+utilStyleFila+'">$'+fmtMoney(utilFila)+'</td>'+
+                  '<td style="text-align:right;'+utilStyleFila+'">'+pctFila.toFixed(0)+'%</td>'+
+                  '<td style="text-align:right">'+(Math.round(f.cantidad*100)/100)+'</td>'+
+                  '<td style="text-align:right">$'+fmtMoney(f.importe)+'</td>'+
+                  '<td style="text-align:right">$'+fmtMoney(precioUnitFilaG)+'<div class="cliente-sub">'+fmtRangoFechas(f.fechaMin, f.fechaMax)+'</div></td>'+
+                  '<td style="text-align:right;color:#ffb74d">$'+fmtMoney(costoFila)+'</td>'+
+                  '<td style="text-align:right">$'+fmtMoney(costoUnitarioPorVendida(f))+'<div class="cliente-sub">'+fmtRangoVigencia(costoVigenteDesdeMostrado(f), f.costoVigenteHasta)+'</div></td>'+
+                '</tr>';
+              });
+            }
           });
         }
       });
-    }
 
     html += '<tr class="total-row">'+
-      '<td colspan="3">TOTAL</td>'+
-      '<td style="text-align:right">$'+totalImporte.toFixed(0)+'</td>'+
-      '<td style="text-align:right">$'+totalCosto.toFixed(0)+'</td>'+
-      '<td style="text-align:right">$'+totalUtilidad.toFixed(0)+'</td>'+
+      '<td>TOTAL</td>'+
+      '<td style="text-align:right">$'+fmtMoney(totalUtilidad)+'</td>'+
       '<td style="text-align:right">'+totalPct.toFixed(0)+'%</td>'+
+      '<td style="text-align:right">—</td>'+
+      '<td style="text-align:right">$'+fmtMoney(totalImporte)+'</td>'+
+      '<td style="text-align:right">—</td>'+
+      '<td style="text-align:right">$'+fmtMoney(totalCosto)+'</td>'+
+      '<td style="text-align:right">—</td>'+
     '</tr>';
     html += '</tbody></table></div></div>';
   }
@@ -934,18 +1024,18 @@ function renderTablero() {
         var v = pm.datos[fr][m];
         var pct = maxCelda>0 ? v/maxCelda*100 : 0;
         var bg = v>0 ? 'rgba(76,175,80,'+(0.08+0.35*pct/100).toFixed(2)+')' : 'transparent';
-        html += '<td style="text-align:right;background:'+bg+'">'+(v>0?'$'+v.toFixed(0):'—')+'</td>';
+        html += '<td style="text-align:right;background:'+bg+'">'+(v>0?'$'+fmtMoney(v):'—')+'</td>';
       });
-      html += '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+pm.totalesFruta[fr].toFixed(0)+'</td></tr>';
+      html += '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+fmtMoney(pm.totalesFruta[fr])+'</td></tr>';
     });
     var totalGeneral = 0;
     html += '<tr class="total-row"><td>TOTAL</td>';
     pm.meses.forEach(function(m){
       var totalMes = pm.frutas.reduce(function(s,fr){ return s+pm.datos[fr][m]; },0);
       totalGeneral += totalMes;
-      html += '<td style="text-align:right">$'+totalMes.toFixed(0)+'</td>';
+      html += '<td style="text-align:right">$'+fmtMoney(totalMes)+'</td>';
     });
-    html += '<td style="text-align:right">$'+totalGeneral.toFixed(0)+'</td></tr>';
+    html += '<td style="text-align:right">$'+fmtMoney(totalGeneral)+'</td></tr>';
     html += '</tbody></table></div></div>';
   }
 
@@ -977,17 +1067,18 @@ function renderTablero() {
       renderTablero();
     });
   });
-  container.querySelectorAll(".producto-group-row").forEach(function(row){
-    row.addEventListener("click", function(){
-      var key = this.dataset.producto;
-      productoExpandido[key] = !productoExpandido[key];
-      renderTablero();
-    });
-  });
   container.querySelectorAll(".fruta-group-row").forEach(function(row){
     row.addEventListener("click", function(){
       var fruta = this.dataset.fruta;
       frutaExpandida[fruta] = !frutaExpandida[fruta];
+      renderTablero();
+    });
+  });
+  container.querySelectorAll(".presentacion-group-row").forEach(function(row){
+    row.addEventListener("click", function(e){
+      e.stopPropagation();
+      var key = this.dataset.presentacion;
+      presentacionExpandida[key] = !presentacionExpandida[key];
       renderTablero();
     });
   });
@@ -1059,10 +1150,10 @@ function renderGraficaVentas(datos) {
     }
     var topY = baseY - Math.max(costoH, ventaH);
     var label = mostrarLabels
-      ? '<text x="'+(x+barW/2)+'" y="'+(topY-6)+'" text-anchor="middle" font-size="10" font-weight="bold" fill="'+(esPerdida?'#ff7070':'#a8e6a3')+'">'+(p.utilidad>=0?'+':'−')+'$'+Math.round(Math.abs(p.utilidad))+'</text>'
+      ? '<text x="'+(x+barW/2)+'" y="'+(topY-6)+'" text-anchor="middle" font-size="10" font-weight="bold" fill="'+(esPerdida?'#ff7070':'#a8e6a3')+'">'+(p.utilidad>=0?'+':'−')+'$'+fmtMoney(Math.abs(p.utilidad))+'</text>'
       : '';
     var xLabel = '<text x="'+(x+barW/2)+'" y="'+(baseY+16)+'" text-anchor="middle" font-size="9" fill="#6b9e6b">'+p.label+'</text>';
-    var titulo = '<title>'+p.label+' — Venta $'+p.venta.toFixed(0)+' · Costo $'+p.costo.toFixed(0)+' · Utilidad $'+p.utilidad.toFixed(0)+'</title>';
+    var titulo = '<title>'+p.label+' — Venta $'+fmtMoney(p.venta)+' · Costo $'+fmtMoney(p.costo)+' · Utilidad $'+fmtMoney(p.utilidad)+'</title>';
     return '<g>'+titulo+rects+label+xLabel+'</g>';
   }).join("");
 
@@ -1127,7 +1218,7 @@ function renderResumen() {
   });
   var granTotal=datos.reduce(function(s,r){return s+(parseFloat(r[4])||0);},0);
   document.getElementById("granTotalLabel").textContent=filtro?"TOTAL · "+filtro:"TOTAL GENERAL";
-  document.getElementById("granTotal").textContent="$"+granTotal.toFixed(0);
+  document.getElementById("granTotal").textContent="$"+fmtMoney(granTotal);
   document.getElementById("numClientes").textContent=Object.keys(byCliente).length+" clientes";
   document.getElementById("numRegistros").textContent=datos.length+" registros";
   var container=document.getElementById("resumenCards");
@@ -1149,19 +1240,19 @@ function renderResumen() {
     tr.innerHTML=
       '<td><div class="cliente-name">'+nombre+ubiTag+horaTag+'</div>'+direccionTag+'<div class="cliente-sub">'+info.items.length+' producto'+(info.items.length!==1?"s":"")+'</div></td>'+
       '<td style="color:#6b9e6b;font-size:13px">'+(isOpen?"▲":"▼")+'</td>'+
-      '<td>$'+info.total.toFixed(0)+'<div style="margin-top:4px">'+pagadoTag+'</div></td>';
+      '<td>$'+fmtMoney(info.total)+'<div style="margin-top:4px">'+pagadoTag+'</div></td>';
     tr.addEventListener("click",function(){expandido=(expandido===nombre)?null:nombre;renderResumen();});
     tbody.appendChild(tr);
     if(isOpen){
       info.items.forEach(function(it){
         var dtr=document.createElement("tr"); dtr.className="detail-row";
-        dtr.innerHTML='<td style="color:#a8e6a3">'+it.cantidad+'× '+it.producto+'</td><td style="color:#5a8a5a;font-size:12px">'+it.fecha+'</td><td>$'+it.total.toFixed(0)+'</td>';
+        dtr.innerHTML='<td style="color:#a8e6a3">'+it.cantidad+'× '+it.producto+'</td><td style="color:#5a8a5a;font-size:12px">'+it.fecha+'</td><td>$'+fmtMoney(it.total)+'</td>';
         tbody.appendChild(dtr);
       });
     }
   });
   var ttr=document.createElement("tr"); ttr.className="total-row";
-  ttr.innerHTML='<td colspan="2">TOTAL '+(filtro||"GENERAL")+'</td><td>$'+granTotal.toFixed(0)+'</td>';
+  ttr.innerHTML='<td colspan="2">TOTAL '+(filtro||"GENERAL")+'</td><td>$'+fmtMoney(granTotal)+'</td>';
   tbody.appendChild(ttr);
   table.appendChild(tbody);
   container.appendChild(table);
@@ -1648,9 +1739,9 @@ function renderProveedor() {
   var sumDiv = document.createElement("div");
   sumDiv.className = "prov-summary";
   sumDiv.innerHTML =
-    '<div><div class="prov-stat-label">VENTA TOTAL</div><div class="prov-stat-val">$'+calc.ventaTotal.toFixed(0)+'</div></div>'+
-    '<div><div class="prov-stat-label">PAGO PROVEEDOR</div><div class="prov-stat-val naranja">$'+calc.costoTotalProveedor.toFixed(0)+'</div></div>'+
-    '<div><div class="prov-stat-label">GANANCIA NETA</div><div class="prov-stat-val '+gnClass+'">$'+calc.gananciaNeta.toFixed(0)+'</div></div>';
+    '<div><div class="prov-stat-label">VENTA TOTAL</div><div class="prov-stat-val">$'+fmtMoney(calc.ventaTotal)+'</div></div>'+
+    '<div><div class="prov-stat-label">PAGO PROVEEDOR</div><div class="prov-stat-val naranja">$'+fmtMoney(calc.costoTotalProveedor)+'</div></div>'+
+    '<div><div class="prov-stat-label">GANANCIA NETA</div><div class="prov-stat-val '+gnClass+'">$'+fmtMoney(calc.gananciaNeta)+'</div></div>';
   container.appendChild(sumDiv);
 
   // ── Tarjeta por fruta ──
@@ -1712,9 +1803,9 @@ function renderProveedor() {
         '</div>'+
         '<div style="text-align:right">'+
           '<div class="fruta-botes-big">'+(b.esPorKg ? b.kgComprar.toFixed(2) : b.botesComprar)+'</div>'+
-          '<div class="fruta-botes-label">'+(b.esPorKg ? 'kg&nbsp;·&nbsp;$'+b.costoProveedor : b.esPorClamshell ? 'clamshell'+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;$'+b.costoProveedor : 'bote'+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;$'+b.costoProveedor)+'</div>'+
+          '<div class="fruta-botes-label">'+(b.esPorKg ? 'kg&nbsp;·&nbsp;$'+fmtMoney(b.costoProveedor) : b.esPorClamshell ? 'clamshell'+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;$'+fmtMoney(b.costoProveedor) : 'bote'+(b.botesComprar!==1?"s":"")+'&nbsp;·&nbsp;$'+fmtMoney(b.costoProveedor))+'</div>'+
           (b.esPorKg ? '' : '<div class="fruta-botes-label" style="color:#a8e6a3;font-size:12px;margin-top:2px">'+b.kgComprar.toFixed(1)+' kg</div>')+
-          '<div class="fruta-botes-label" style="color:#6b9e6b;font-size:10px;margin-top:3px">costo $'+b.costoUnitario+(b.esPorKg?'/kg':b.esPorClamshell?'/clamshell':'/bote')+' · vigente desde '+b.costoVigenteDesde+'</div>'+
+          '<div class="fruta-botes-label" style="color:#6b9e6b;font-size:10px;margin-top:3px">costo $'+fmtMoney(b.costoUnitario)+(b.esPorKg?'/kg':b.esPorClamshell?'/clamshell':'/bote')+' · vigente desde '+b.costoVigenteDesde+'</div>'+
         '</div>'+
       '</div>'+
       '<div class="fruta-stats-row">'+
@@ -1737,7 +1828,7 @@ function renderProveedor() {
     var mcard = document.createElement("div");
     mcard.className = "elote-card";
     var totalMax = MAX.reduce(function(s,o){ return s+o.total; }, 0);
-    mcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">✨ Ludo Berry Max — qué comprar</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+totalMax.toFixed(0)+'</span></div>';
+    mcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">✨ Ludo Berry Max — qué comprar</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+fmtMoney(totalMax)+'</span></div>';
     MAX.forEach(function(o){
       var mrow = document.createElement("div");
       mrow.className = "elote-row";
@@ -1745,11 +1836,11 @@ function renderProveedor() {
         '<div>'+
           '<div style="color:#e8f5e8">'+o.cliente+'</div>'+
           '<div style="color:#6b9e6b;font-size:11px;margin-top:3px">'+
-            o.items.map(function(it){ return emojiDeFruta(it.fruta)+' '+it.cantidad+' '+it.fruta+' ($'+it.subtotal.toFixed(0)+')'; }).join(' · ')+
+            o.items.map(function(it){ return emojiDeFruta(it.fruta)+' '+it.cantidad+' '+it.fruta+' ($'+fmtMoney(it.subtotal)+')'; }).join(' · ')+
           '</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="color:#a8e6a3;font-size:13px;font-weight:bold">= $'+o.total.toFixed(0)+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px;font-weight:bold">= $'+fmtMoney(o.total)+'</div>'+
         '</div>';
       mcard.appendChild(mrow);
     });
@@ -1761,7 +1852,7 @@ function renderProveedor() {
     var ecard = document.createElement("div");
     ecard.className = "elote-card";
     var etotal = Object.values(E).reduce(function(s,e){return s+e.costoTotal;},0);
-    ecard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🌽 Elotes</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+etotal.toFixed(0)+'</span></div>';
+    ecard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🌽 Elotes</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+fmtMoney(etotal)+'</span></div>';
     Object.keys(E).forEach(function(en){
       var e = E[en];
       var erow = document.createElement("div");
@@ -1774,8 +1865,8 @@ function renderProveedor() {
           '</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="color:#ffcc02;font-weight:bold">'+etiquetaCharola(e.piezas)+' × $'+e.costoUnitario+'</div>'+
-          '<div style="color:#a8e6a3;font-size:13px">= $'+e.costoTotal+'</div>'+
+          '<div style="color:#ffcc02;font-weight:bold">'+etiquetaCharola(e.piezas)+' × $'+fmtMoney(e.costoUnitario)+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+fmtMoney(e.costoTotal)+'</div>'+
           '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+e.costoVigenteDesde+'</div>'+
         '</div>';
       ecard.appendChild(erow);
@@ -1788,7 +1879,7 @@ function renderProveedor() {
     var pcard = document.createElement("div");
     pcard.className = "elote-card";
     var ptotal = Object.values(P).reduce(function(s,p){return s+p.costoTotal;},0);
-    pcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🥥 Piezas</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+ptotal.toFixed(0)+'</span></div>';
+    pcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🥥 Piezas</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+fmtMoney(ptotal)+'</span></div>';
     Object.keys(P).sort().forEach(function(pn){
       var p = P[pn];
       var prow = document.createElement("div");
@@ -1801,8 +1892,8 @@ function renderProveedor() {
           '</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="color:#ffcc02;font-weight:bold">'+p.piezas+' pz × $'+p.costoUnitario+'</div>'+
-          '<div style="color:#a8e6a3;font-size:13px">= $'+p.costoTotal.toFixed(2)+'</div>'+
+          '<div style="color:#ffcc02;font-weight:bold">'+p.piezas+' pz × $'+fmtMoney(p.costoUnitario)+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+fmtMoney(p.costoTotal)+'</div>'+
           '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+p.costoVigenteDesde+'</div>'+
         '</div>';
       pcard.appendChild(prow);
@@ -1815,7 +1906,7 @@ function renderProveedor() {
     var mcard = document.createElement("div");
     mcard.className = "elote-card";
     var mtotal = Object.values(M).reduce(function(s,m){return s+m.costoTotal;},0);
-    mcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🥭 Mercado (kg)</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+mtotal.toFixed(0)+'</span></div>';
+    mcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🥭 Mercado (kg)</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+fmtMoney(mtotal)+'</span></div>';
     Object.keys(M).sort().forEach(function(mn){
       var m = M[mn];
       var mrow = document.createElement("div");
@@ -1828,8 +1919,8 @@ function renderProveedor() {
           '</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="color:#ffcc02;font-weight:bold">'+m.kgNecesarios+' kg × $'+m.costoUnitario+'</div>'+
-          '<div style="color:#a8e6a3;font-size:13px">= $'+m.costoTotal.toFixed(2)+'</div>'+
+          '<div style="color:#ffcc02;font-weight:bold">'+m.kgNecesarios+' kg × $'+fmtMoney(m.costoUnitario)+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+fmtMoney(m.costoTotal)+'</div>'+
           '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+m.costoVigenteDesde+'</div>'+
         '</div>';
       mcard.appendChild(mrow);
@@ -1842,7 +1933,7 @@ function renderProveedor() {
     var hcard = document.createElement("div");
     hcard.className = "elote-card";
     var htotal = Object.values(H).reduce(function(s,h){return s+h.costoTotal;},0);
-    hcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🥚 Huevo</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+htotal.toFixed(0)+'</span></div>';
+    hcard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🥚 Huevo</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+fmtMoney(htotal)+'</span></div>';
     Object.keys(H).sort().forEach(function(hn){
       var h = H[hn];
       var hrow = document.createElement("div");
@@ -1855,8 +1946,8 @@ function renderProveedor() {
           '</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="color:#ffcc02;font-weight:bold">'+h.unidades+' × $'+h.costoUnitario+'</div>'+
-          '<div style="color:#a8e6a3;font-size:13px">= $'+h.costoTotal.toFixed(2)+'</div>'+
+          '<div style="color:#ffcc02;font-weight:bold">'+h.unidades+' × $'+fmtMoney(h.costoUnitario)+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+fmtMoney(h.costoTotal)+'</div>'+
           '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+h.costoVigenteDesde+'</div>'+
         '</div>';
       hcard.appendChild(hrow);
@@ -1869,7 +1960,7 @@ function renderProveedor() {
     var pucard = document.createElement("div");
     pucard.className = "elote-card";
     var putotal = Object.values(PU).reduce(function(s,pu){return s+pu.costoTotal;},0);
-    pucard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🧃 Pulpas</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+putotal.toFixed(0)+'</span></div>';
+    pucard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">🧃 Pulpas</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+fmtMoney(putotal)+'</span></div>';
     Object.keys(PU).sort().forEach(function(sn){
       var pu = PU[sn];
       var purow = document.createElement("div");
@@ -1882,8 +1973,8 @@ function renderProveedor() {
           '</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="color:#ffcc02;font-weight:bold">'+pu.unidades+' × $'+pu.costoUnitario+'</div>'+
-          '<div style="color:#a8e6a3;font-size:13px">= $'+pu.costoTotal.toFixed(2)+'</div>'+
+          '<div style="color:#ffcc02;font-weight:bold">'+pu.unidades+' × $'+fmtMoney(pu.costoUnitario)+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+fmtMoney(pu.costoTotal)+'</div>'+
           '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+pu.costoVigenteDesde+'</div>'+
         '</div>';
       pucard.appendChild(purow);
@@ -1897,7 +1988,7 @@ function renderProveedor() {
     var ocard = document.createElement("div");
     ocard.className = "elote-card";
     var ototal = Object.values(O).reduce(function(s,o){return s+o.costoTotal;},0);
-    ocard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">📦 Otros</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+ototal.toFixed(0)+'</span></div>';
+    ocard.innerHTML = '<div class="elote-card-header"><div style="font-size:16px;font-weight:bold;color:#e8f5e8">📦 Otros</div><span style="color:#ffcc02;font-weight:bold;font-size:15px">$'+fmtMoney(ototal)+'</span></div>';
     Object.keys(O).sort().forEach(function(pn){
       var o = O[pn];
       var orow = document.createElement("div");
@@ -1911,7 +2002,7 @@ function renderProveedor() {
         '</div>'+
         '<div style="text-align:right">'+
           '<div style="color:#ffcc02;font-weight:bold">'+o.unidades+' × costo guardado</div>'+
-          '<div style="color:#a8e6a3;font-size:13px">= $'+o.costoTotal.toFixed(2)+'</div>'+
+          '<div style="color:#a8e6a3;font-size:13px">= $'+fmtMoney(o.costoTotal)+'</div>'+
         '</div>';
       ocard.appendChild(orow);
     });
@@ -1928,41 +2019,41 @@ function renderProveedor() {
   Object.keys(B).sort().forEach(function(fn){
     var b = B[fn];
     var precioKgCopy = Math.round(b.costoProveedor / b.kgComprar);
-    var formulaCopy = precioKgCopy+" × "+b.kgComprar.toFixed(2)+" kg = $"+b.costoProveedor;
+    var formulaCopy = precioKgCopy+" × "+b.kgComprar.toFixed(2)+" kg = $"+fmtMoney(b.costoProveedor);
     if (b.esPorKg) {
-      lineas.push(fn+": "+b.kgComprar.toFixed(2)+" kg — $"+b.costoProveedor);
+      lineas.push(fn+": "+b.kgComprar.toFixed(2)+" kg — $"+fmtMoney(b.costoProveedor));
     } else {
       var unidad = b.esPorClamshell ? "clamshell" : "bote";
-      lineas.push(fn+": "+b.botesComprar+" "+unidad+(b.botesComprar!==1?"s":"")+" ("+b.kgComprar.toFixed(1)+" kg) — $"+b.costoProveedor);
+      lineas.push(fn+": "+b.botesComprar+" "+unidad+(b.botesComprar!==1?"s":"")+" ("+b.kgComprar.toFixed(1)+" kg) — $"+fmtMoney(b.costoProveedor));
     }
     lineas.push("  "+formulaCopy);
   });
   Object.keys(E).sort().forEach(function(en){
     var e = E[en];
-    lineas.push(en+": "+etiquetaCharola(e.piezas)+" — $"+e.costoTotal);
+    lineas.push(en+": "+etiquetaCharola(e.piezas)+" — $"+fmtMoney(e.costoTotal));
   });
   Object.keys(P).sort().forEach(function(pn){
     var p = P[pn];
-    lineas.push(pn+": "+p.piezas+" pz — $"+p.costoTotal.toFixed(2));
+    lineas.push(pn+": "+p.piezas+" pz — $"+fmtMoney(p.costoTotal));
   });
   Object.keys(M).sort().forEach(function(mn){
     var m = M[mn];
-    lineas.push(mn+": "+m.kgNecesarios+" kg — $"+m.costoTotal.toFixed(2));
+    lineas.push(mn+": "+m.kgNecesarios+" kg — $"+fmtMoney(m.costoTotal));
   });
   Object.keys(H).sort().forEach(function(hn){
     var h = H[hn];
-    lineas.push(hn+": "+h.unidades+" — $"+h.costoTotal.toFixed(2));
+    lineas.push(hn+": "+h.unidades+" — $"+fmtMoney(h.costoTotal));
   });
   Object.keys(PU).sort().forEach(function(sn){
     var pu = PU[sn];
-    lineas.push("Concentrado de Pulpas ("+sn+"): "+pu.unidades+" — $"+pu.costoTotal.toFixed(2));
+    lineas.push("Concentrado de Pulpas ("+sn+"): "+pu.unidades+" — $"+fmtMoney(pu.costoTotal));
   });
   Object.keys(O).sort().forEach(function(pn){
     var o = O[pn];
-    lineas.push(pn+": "+o.unidades+" — $"+o.costoTotal.toFixed(2));
+    lineas.push(pn+": "+o.unidades+" — $"+fmtMoney(o.costoTotal));
   });
   lineas.push("");
-  lineas.push("Total a pagar: $"+calc.costoTotalProveedor.toFixed(0));
+  lineas.push("Total a pagar: $"+fmtMoney(calc.costoTotalProveedor));
   var textoCompleto = lineas.join("\n");
 
   var headerHTML = '<div class="pedido-box-header">'+
@@ -1975,7 +2066,7 @@ function renderProveedor() {
     var b = B[fn];
     var emoji = emojiDeFruta(fn);
     var precioKg = Math.round(b.costoProveedor / b.kgComprar);
-    var formula = precioKg+' × '+b.kgComprar.toFixed(2)+' kg = $'+b.costoProveedor;
+    var formula = precioKg+' × '+b.kgComprar.toFixed(2)+' kg = $'+fmtMoney(b.costoProveedor);
     var cantLabel;
     if (b.esPorKg) {
       cantLabel = b.kgComprar.toFixed(2)+' kg';
@@ -1986,7 +2077,7 @@ function renderProveedor() {
     lineasHTML += '<div class="pedido-line" style="flex-direction:column;align-items:stretch;gap:3px">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline">'+
         '<span class="pedido-fruta">'+emoji+' '+fn+'<span class="pedido-cant">'+cantLabel+'</span></span>'+
-        '<span class="pedido-costo">$'+b.costoProveedor+'</span>'+
+        '<span class="pedido-costo">$'+fmtMoney(b.costoProveedor)+'</span>'+
       '</div>'+
       '<div style="font-size:11px;color:#6b9e6b;letter-spacing:0.3px">'+formula+'</div>'+
     '</div>';
@@ -1995,45 +2086,45 @@ function renderProveedor() {
     var e = E[en];
     lineasHTML += '<div class="pedido-line">'+
       '<span class="pedido-fruta">🌽 '+en+'<span class="pedido-cant">'+etiquetaCharola(e.piezas)+'</span></span>'+
-      '<span class="pedido-costo">$'+e.costoTotal+'</span>'+
+      '<span class="pedido-costo">$'+fmtMoney(e.costoTotal)+'</span>'+
     '</div>';
   });
   Object.keys(P).sort().forEach(function(pn){
     var p = P[pn];
     lineasHTML += '<div class="pedido-line">'+
       '<span class="pedido-fruta">'+emojiDeFruta(pn)+' '+pn+'<span class="pedido-cant">'+p.piezas+' pz</span></span>'+
-      '<span class="pedido-costo">$'+p.costoTotal.toFixed(2)+'</span>'+
+      '<span class="pedido-costo">$'+fmtMoney(p.costoTotal)+'</span>'+
     '</div>';
   });
   Object.keys(M).sort().forEach(function(mn){
     var m = M[mn];
     lineasHTML += '<div class="pedido-line">'+
       '<span class="pedido-fruta">'+emojiDeFruta(mn)+' '+mn+'<span class="pedido-cant">'+m.kgNecesarios+' kg</span></span>'+
-      '<span class="pedido-costo">$'+m.costoTotal.toFixed(2)+'</span>'+
+      '<span class="pedido-costo">$'+fmtMoney(m.costoTotal)+'</span>'+
     '</div>';
   });
   Object.keys(H).sort().forEach(function(hn){
     var h = H[hn];
     lineasHTML += '<div class="pedido-line">'+
       '<span class="pedido-fruta">🥚 '+hn+'<span class="pedido-cant">'+h.unidades+'</span></span>'+
-      '<span class="pedido-costo">$'+h.costoTotal.toFixed(2)+'</span>'+
+      '<span class="pedido-costo">$'+fmtMoney(h.costoTotal)+'</span>'+
     '</div>';
   });
   Object.keys(PU).sort().forEach(function(sn){
     var pu = PU[sn];
     lineasHTML += '<div class="pedido-line">'+
       '<span class="pedido-fruta">🧃 Concentrado de Pulpas ('+sn+')<span class="pedido-cant">'+pu.unidades+'</span></span>'+
-      '<span class="pedido-costo">$'+pu.costoTotal.toFixed(2)+'</span>'+
+      '<span class="pedido-costo">$'+fmtMoney(pu.costoTotal)+'</span>'+
     '</div>';
   });
   Object.keys(O).sort().forEach(function(pn){
     var o = O[pn];
     lineasHTML += '<div class="pedido-line">'+
       '<span class="pedido-fruta">📦 '+pn+'<span class="pedido-cant">'+o.unidades+'</span></span>'+
-      '<span class="pedido-costo">$'+o.costoTotal.toFixed(2)+'</span>'+
+      '<span class="pedido-costo">$'+fmtMoney(o.costoTotal)+'</span>'+
     '</div>';
   });
-  var totalHTML = '<div class="pedido-total-row"><span>TOTAL A PAGAR</span><span>$'+calc.costoTotalProveedor.toFixed(0)+'</span></div>';
+  var totalHTML = '<div class="pedido-total-row"><span>TOTAL A PAGAR</span><span>$'+fmtMoney(calc.costoTotalProveedor)+'</span></div>';
 
   pedidoBox.innerHTML = headerHTML + lineasHTML + totalHTML;
   container.appendChild(pedidoBox);

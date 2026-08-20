@@ -137,7 +137,7 @@ var HIST_COSTO_PROVEEDOR_KG = {
 // Productos vendidos por pieza individual, fuera de la familia de elotes.
 var HIST_COSTO_PIEZA = {
   "Coco (café)": [ {desde:"2026-06-30", costo:40} ],
-  "Pitahaya":    [ {desde:"2026-06-30", costo:36.67}, {desde:"2026-07-08", costo:76} ],
+  "Pitahaya":    [ {desde:"2026-06-30", costo:76} ],
   // Ajo — presets no proporcionales (ver CATALOGO.ajo_pelado.presets), cada bolsa
   // se costea como pieza propia (el nombre guardado ya trae el sufijo de tamaño).
   "Bote ajo pelado (150 g)": [ {desde:"2026-08-05", costo:45} ],
@@ -195,6 +195,7 @@ function normalizarFruta(nombre) {
 // el nombre corto y sin esto se ven como un producto aparte del actual.
 var ALIAS_PRODUCTOS = {
   "Ludo Antojo": "Elote Select",
+  "Elote amarillo": "Elote Select",
   "Ludo Select": "Ludo Berry Select",
   "Ludo Pack": "Ludo Berry 3-Pack",
   "Ludo Mix": "Ludo Berry Mix",
@@ -225,13 +226,28 @@ var ELOTE_FRUTA = {
   "Elote Blanco 5-Pack": "Elote blanco",
 };
 
+// Un día antes de una fecha "YYYY-MM-DD" — usado para calcular hasta cuándo
+// estuvo vigente el tramo de costo anterior a uno nuevo.
+function diaAnterior(fechaStr) {
+  var d = new Date(fechaStr + "T00:00:00");
+  d.setDate(d.getDate() - 1);
+  var y = d.getFullYear();
+  var m = String(d.getMonth()+1).padStart(2,"0");
+  var day = String(d.getDate()).padStart(2,"0");
+  return y+"-"+m+"-"+day;
+}
+
 function costoVigente(historial, fecha) {
-  if (!historial || !historial.length) return { costo:0, desde:null };
-  var activo = historial[0];
+  if (!historial || !historial.length) return { costo:0, desde:null, hasta:null };
+  var idx = 0;
   for (var i = 0; i < historial.length; i++) {
-    if (historial[i].desde <= fecha) activo = historial[i]; else break;
+    if (historial[i].desde <= fecha) idx = i; else break;
   }
-  return { costo: activo.costo, desde: activo.desde };
+  var activo = historial[idx];
+  var siguiente = historial[idx+1];
+  // hasta:null significa que este es el tramo vigente actual (sigue aplicando "a la fecha").
+  var hasta = siguiente ? diaAnterior(siguiente.desde) : null;
+  return { costo: activo.costo, desde: activo.desde, hasta: hasta };
 }
 
 function isBerry(nombre) {

@@ -621,6 +621,63 @@ function calcularTablaVentas(datos) {
   });
 }
 
+// Costo unitario en unidades de la presentación VENDIDA, no de la comprada.
+// El proveedor cobra por bote, pero si ese bote se vendió repartido en
+// clamshells (ej. Ludo Berry Select), comparar el precio de venta contra el
+// costo del bote completo no dice nada — hay que comparar contra lo que
+// costó CADA clamshell: costo del bote ÷ 3 (CAJAS_POR_BOTE). Ej. bote a $80
+// vendido en clamshells → $80/3 = $26.66 por clamshell.
+function costoUnitarioPorVendida(f) {
+  if (!f.costoUnitarioNominal) return 0;
+  var factor = (f.presentacionComprada === f.presentacion) ? 1 : CAJAS_POR_BOTE;
+  return f.costoUnitarioNominal / factor;
+}
+
+// Clasifica cada fila de una tabla de ventas (ver calcularTablaVentas) como
+// venta a "familia" (precio de costo/cortesía) o "cliente" (precio normal).
+// No hay una columna que marque "esto se vendió a precio familiar" en el
+// Sheet, así que se infiere comparando el precio unitario vendido contra el
+// costo — si el cliente pagó al costo (o menos, con 1% de tolerancia por
+// redondeo), es familia; si pagó más (el caso normal, con margen), es
+// cliente. Ludo Berry Mix/Max se clasifican como PAQUETE COMPLETO (suma de
+// todas sus frutas), no fruta por fruta — un pedido de Max reparte su
+// precio entre 4 frutas de costo distinto, así que comparar cada fruta
+// contra su fracción pareja del precio la haría ver "regalada" o "con
+// margen de más" aunque el pedido completo se vendió a precio normal.
+// Select/3-Pack NO entran en esa excepción — cada pedido es de una sola
+// fruta a precio completo, se clasifica bien fila por fila.
+function crearClasificadorFamiliar(tabla) {
+  var totalesPorPaquete = {};
+  tabla.forEach(function(f){
+    if (PRODUCTOS_MULTIFRUTA.indexOf(f.nombreComercial) === -1) return;
+    if (!totalesPorPaquete[f.nombreComercial]) totalesPorPaquete[f.nombreComercial] = { importe:0, costo:0 };
+    totalesPorPaquete[f.nombreComercial].importe += f.importe;
+    totalesPorPaquete[f.nombreComercial].costo += f.costo;
+  });
+  return function esVentaFamiliar(f) {
+    if (PRODUCTOS_MULTIFRUTA.indexOf(f.nombreComercial) !== -1) {
+      var t = totalesPorPaquete[f.nombreComercial];
+      return !!t && t.importe > 0 && t.importe <= t.costo * 1.01;
+    }
+    var nominalPorUnidadVendida = costoUnitarioPorVendida(f);
+    return nominalPorUnidadVendida > 0 && f.precioVenta <= nominalPorUnidadVendida * 1.01;
+  };
+}
+
+// Ventas/costo/utilidad totales que se vendieron a precio de familia (ver
+// crearClasificadorFamiliar) — usado para desglosar los KPI de arriba
+// (Ventas Totales/Pago a Proveedor/Utilidad Neta) en Clientes vs Familia.
+function calcularVentasFamiliar(datos) {
+  var tabla = calcularTablaVentas(datos);
+  var esVentaFamiliar = crearClasificadorFamiliar(tabla);
+  var out = { ventas:0, costo:0 };
+  tabla.forEach(function(f){
+    if (esVentaFamiliar(f)) { out.ventas += f.importe; out.costo += f.costo; }
+  });
+  out.utilidad = out.ventas - out.costo;
+  return out;
+}
+
 // Formatea una fecha "YYYY-MM-DD" como "5 jun '26".
 function fmtFechaCorta(f) {
   var meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
@@ -733,6 +790,17 @@ function calcularVentasPorPeriodo(datos, agrupacion) {
 function kpiCard(label, val, cls) {
   return '<div class="kpi-card"><div class="kpi-label">'+label+'</div><div class="kpi-val '+(cls||'')+'">'+val+'</div></div>';
 }
+// Tarjeta KPI con el total de siempre, más un desglose Clientes/Familia
+// abajo — para ver de un vistazo cuánto de la venta/costo/utilidad viene de
+// precio normal vs precio de costo (cortesía a familia).
+function kpiCardDesglose(label, val, cls, cliente, familia) {
+  return '<div class="kpi-card"><div class="kpi-label">'+label+'</div><div class="kpi-val '+(cls||'')+'">'+val+'</div>'+
+    '<div style="display:flex;gap:12px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.12)">'+
+      '<div style="flex:1"><div style="font-size:9px;color:#6b9e6b;letter-spacing:1px">CLIENTES</div><div style="font-size:13px;font-weight:bold;color:#e8f5e8">$'+fmtMoney(cliente)+'</div></div>'+
+      '<div style="flex:1"><div style="font-size:9px;color:#6b9e6b;letter-spacing:1px">FAMILIA</div><div style="font-size:13px;font-weight:bold;color:#e8f5e8">$'+fmtMoney(familia)+'</div></div>'+
+    '</div>'+
+  '</div>';
+}
 function kpiMini(label, val) {
   return '<div class="kpi-mini"><div class="kpi-mini-label">'+label+'</div><div class="kpi-mini-val">'+val+'</div></div>';
 }
@@ -772,14 +840,21 @@ function renderTablero() {
 
   var k = calcularKPIsGlobal(datos);
   var rangoLabel = (desde||hasta) ? ((desde||"inicio")+" → "+(hasta||"hoy")) : "TODO EL HISTORIAL · "+k.numFechas+" fecha"+(k.numFechas!==1?"s":"")+" con entrega";
+  // Desglose Clientes vs Familia de los 3 KPI principales — la parte de
+  // Familia se calcula directo (ver calcularVentasFamiliar) y Clientes se
+  // obtiene por resta contra el total ya calculado arriba (k.*), para que
+  // los dos números SIEMPRE sumen exacto al total mostrado sin importar
+  // pequeñas diferencias de redondeo entre ambos cálculos.
+  var famKPI = calcularVentasFamiliar(datos);
+  var cliKPI = { ventas: k.ventasTotales - famKPI.ventas, costo: k.pagoProveedorTotal - famKPI.costo, utilidad: k.utilidadNeta - famKPI.utilidad };
 
   var html = "";
   html += '<p class="kpi-rango">'+rangoLabel+'</p>';
 
   html += '<div class="kpi-grid">';
-  html += kpiCard("VENTAS TOTALES", "$"+fmtMoney(k.ventasTotales));
-  html += kpiCard("PAGO A PROVEEDOR", "$"+fmtMoney(k.pagoProveedorTotal), "naranja");
-  html += kpiCard("UTILIDAD NETA", "$"+fmtMoney(k.utilidadNeta), k.utilidadNeta<0 ? "rojo" : "");
+  html += kpiCardDesglose("VENTAS TOTALES", "$"+fmtMoney(k.ventasTotales), "", cliKPI.ventas, famKPI.ventas);
+  html += kpiCardDesglose("PAGO A PROVEEDOR", "$"+fmtMoney(k.pagoProveedorTotal), "naranja", cliKPI.costo, famKPI.costo);
+  html += kpiCardDesglose("UTILIDAD NETA", "$"+fmtMoney(k.utilidadNeta), k.utilidadNeta<0 ? "rojo" : "", cliKPI.utilidad, famKPI.utilidad);
   html += kpiCardPresentacion("PRODUCTOS VENDIDOS", k.porPresentacion);
   html += '</div>';
 
@@ -844,50 +919,9 @@ function renderTablero() {
   // "Familia" (precio de costo/familiar) — en vez de mezclarlas: una venta a
   // precio familiar tiene margen ~0 por diseño (es una cortesía, no un error
   // de precio), así que mezclarla con ventas normales solo diluye el margen
-  // real del negocio sin decir nada útil. No hay una columna que marque
-  // "esto se vendió a precio familiar" en el Sheet, así que se infiere
-  // comparando el precio unitario vendido contra el costo nominal por esa
-  // misma unidad (bote/clamshell/etc, ver presentacionComprada) — si el
-  // cliente pagó al costo (o menos, con 1% de tolerancia por redondeo), es
-  // familia; si pagó más (el caso normal, con margen), es cliente.
-  // Costo unitario en unidades de la presentación VENDIDA, no de la comprada.
-  // El proveedor cobra por bote, pero si ese bote se vendió repartido en
-  // clamshells (ej. Ludo Berry Select), comparar el precio de venta contra
-  // el costo del bote completo no dice nada — hay que comparar contra lo que
-  // costó CADA clamshell: costo del bote ÷ 3 (CAJAS_POR_BOTE). Ej. bote a
-  // $80 vendido en clamshells → $80/3 = $26.66 por clamshell.
-  function costoUnitarioPorVendida(f) {
-    if (!f.costoUnitarioNominal) return 0;
-    var factor = (f.presentacionComprada === f.presentacion) ? 1 : CAJAS_POR_BOTE;
-    return f.costoUnitarioNominal / factor;
-  }
+  // real del negocio sin decir nada útil (ver crearClasificadorFamiliar).
   var tablaCompleta = calcularTablaVentas(datos);
-  // Ludo Berry Mix/Max: el precio de un pedido se reparte PAREJO entre sus
-  // frutas (ej. Max ÷4), pero cada fruta cuesta distinto (Blueberry vs
-  // Fresa). Comparar cada fruta contra su fracción pareja del precio hace
-  // que la fruta más cara del paquete se vea "con margen" y la más barata
-  // se vea "regalada" — aunque el cliente pagó un solo precio de paquete
-  // con margen normal. Por eso estos productos se clasifican cliente/
-  // familia como PAQUETE COMPLETO (suma de todas sus frutas), no fruta por
-  // fruta — así Ludo Berry Max siempre aparece junto con su fresa
-  // correspondiente en la misma vista, nunca partido entre Clientes/Familia.
-  // Select/3-Pack NO entran aquí — cada pedido es de una sola fruta, ya se
-  // clasifica bien fila por fila (ver PRODUCTOS_MULTIFRUTA).
-  var totalesPorPaquete = {};
-  tablaCompleta.forEach(function(f){
-    if (PRODUCTOS_MULTIFRUTA.indexOf(f.nombreComercial) === -1) return;
-    if (!totalesPorPaquete[f.nombreComercial]) totalesPorPaquete[f.nombreComercial] = { importe:0, costo:0 };
-    totalesPorPaquete[f.nombreComercial].importe += f.importe;
-    totalesPorPaquete[f.nombreComercial].costo += f.costo;
-  });
-  function esVentaFamiliar(f) {
-    if (PRODUCTOS_MULTIFRUTA.indexOf(f.nombreComercial) !== -1) {
-      var t = totalesPorPaquete[f.nombreComercial];
-      return !!t && t.importe > 0 && t.importe <= t.costo * 1.01;
-    }
-    var nominalPorUnidadVendida = costoUnitarioPorVendida(f);
-    return nominalPorUnidadVendida > 0 && f.precioVenta <= nominalPorUnidadVendida * 1.01;
-  }
+  var esVentaFamiliar = crearClasificadorFamiliar(tablaCompleta);
   var tabla = tablaCompleta.filter(function(f){
     return vistaDetalleVentas === "familia" ? esVentaFamiliar(f) : !esVentaFamiliar(f);
   });
@@ -939,10 +973,11 @@ function renderTablero() {
     var gruposPorFruta = {};
     tabla.forEach(function(f){
       var gk = grupoDeFila(f);
-      if (!gruposPorFruta[gk]) gruposPorFruta[gk] = { fruta:gk, rows:[], importe:0, costo:0 };
+      if (!gruposPorFruta[gk]) gruposPorFruta[gk] = { fruta:gk, rows:[], importe:0, costo:0, cantidad:0 };
       gruposPorFruta[gk].rows.push(f);
       gruposPorFruta[gk].importe += f.importe;
       gruposPorFruta[gk].costo += f.costo;
+      gruposPorFruta[gk].cantidad += f.cantidad;
     });
     var grupos = Object.keys(gruposPorFruta).map(function(fr){
       var g = gruposPorFruta[fr];
@@ -983,6 +1018,7 @@ function renderTablero() {
 
     var totalImporte = grupos.reduce(function(s,g){ return s+g.importe; },0);
     var totalCosto = grupos.reduce(function(s,g){ return s+g.costo; },0);
+    var totalCantidad = grupos.reduce(function(s,g){ return s+g.cantidad; },0);
     var totalUtilidad = totalImporte - totalCosto;
     var totalPct = totalImporte > 0 ? (totalUtilidad / totalImporte * 100) : 0;
 
@@ -1068,7 +1104,7 @@ function renderTablero() {
           '<td style="font-weight:bold;color:#e8f5e8">'+(abierto?"▲":"▼")+' '+g.fruta+'</td>'+
           '<td style="text-align:right;font-weight:bold;'+utilStyle+'">$'+fmtMoney(g.utilidad)+'</td>'+
           '<td style="text-align:right;font-weight:bold;'+utilStyle+'">'+pctGrupo.toFixed(0)+'%</td>'+
-          '<td style="text-align:right;color:#6b9e6b">—</td>'+
+          '<td style="text-align:right">'+(Math.round(g.cantidad*100)/100)+'</td>'+
           '<td style="color:#6b9e6b">'+g.unidad+'</td>'+
           '<td style="text-align:right;font-weight:bold;color:#a8e6a3">$'+fmtMoney(g.importe)+'</td>'+
           '<td style="text-align:right;color:#6b9e6b">—</td>'+
@@ -1123,7 +1159,7 @@ function renderTablero() {
       '<td>TOTAL</td>'+
       '<td style="text-align:right">$'+fmtMoney(totalUtilidad)+'</td>'+
       '<td style="text-align:right">'+totalPct.toFixed(0)+'%</td>'+
-      '<td style="text-align:right">—</td>'+
+      '<td style="text-align:right">'+(Math.round(totalCantidad*100)/100)+'</td>'+
       '<td>—</td>'+
       '<td style="text-align:right">$'+fmtMoney(totalImporte)+'</td>'+
       '<td style="text-align:right">—</td>'+

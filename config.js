@@ -54,7 +54,8 @@ var CATALOGO = [
   { id:"ludo_tomatizado",  nombre:"Cherry 3-Pack",                 precio:140, costo:60,  slots:1, emoji:"🍅", frutasPermitidas: FRUTAS_CHERRY },
   { id:"cherry_amarillo",  nombre:"Cherry amarillo",               precio:50,  costo:30,  slots:0, emoji:"🍋" },
   { id:"tomate_kumato",    nombre:"Cherry kumato",                 precio:50,  costo:30,  slots:0, emoji:"🍅" },
-  { id:"ludo_fresh",       nombre:"Cherry Mix",                    precio:140, costo:60,  slots:3, emoji:"🍒", frutasPermitidas: FRUTAS_CHERRY },
+  { id:"ludo_fresh",       nombre:"Cherry Mix",                    precio:140, costo:60,  slots:3, emoji:"🍒", frutasPermitidas: FRUTAS_CHERRY,
+    frutasFijas: FRUTAS_CHERRY }, // siempre 1 de cada uno (Kumato, amarillo, rojo) — no elegible.
   { id:"cherry_rojo",      nombre:"Cherry rojo",                   precio:50,  costo:30,  slots:0, emoji:"🍒" },
   { id:"ciruela_roja",     nombre:"Ciruela roja",                  precio:70,  costo:31,  unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟣" },
   { id:"coco_cafe",        nombre:"Coco (café)",                   precio:60,  costo:40,  slots:0, emoji:"🥥" },

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel 🫐</title>
-<script src="config.js?v=20260819f"></script>
+<script src="config.js?v=20260819g"></script>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { min-height:100vh; background:linear-gradient(160deg,#0b1a0b 0%,#132613 60%,#0b1a0b 100%); font-family:Georgia,serif; color:#e8f5e8; display:flex; flex-direction:column; align-items:center; padding:24px 16px 40px; }
@@ -490,9 +490,14 @@ function filasVenta(r) {
     var multC = p.mult || 1;
     var frutasC = p.frutas.filter(Boolean);
     if (!frutasC.length) return [{ fruta:"(sin fruta)", nombreComercial:nomC, presentacion:"clamshell", presentacionComprada:"—", cantidad:qty*multC, importe:importeTotal, mes:mes, fecha:fecha, costo:0, costoVigenteDesde:null, costoVigenteHasta:null, costoUnitarioNominal:0 }];
+    var cajasC = qty*multC;
+    // El precio se reparte parejo AQUÍ (por pedido) — el costo real de las
+    // frutas por bote todavía no está resuelto (depende del redondeo por
+    // fecha, ver calcularCostoPorFrutaFecha). El reparto final proporcional
+    // al costo REAL de cada fruta se hace después, en calcularTablaVentas,
+    // una vez que todos los costos de esa fecha ya se resolvieron.
     var importeC = importeTotal / frutasC.length;
     return frutasC.map(function(fn){
-      var cajasC = qty*multC;
       var esPorClamshellC = HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(fn);
       var vigC = costoVigente(esPorClamshellC ? HIST_COSTO_PROVEEDOR_CLAMSHELL[fn] : HIST_COSTO_PROVEEDOR[fn], fecha);
       var costoC = esPorClamshellC ? (cajasC * vigC.costo) : null;
@@ -569,6 +574,31 @@ function calcularTablaVentas(datos) {
   // sobrante directamente en la tabla, sin tener que ir a preguntar.
   Object.values(filas).forEach(function(f){
     f.cantidadComprada = f.costoUnitarioNominal > 0 ? f.costo / f.costoUnitarioNominal : null;
+  });
+  // Productos multi-fruta (Ludo Berry Select/3-Pack/Mix/Max, Familiar): el
+  // precio de cada pedido se repartió parejo entre sus frutas arriba, porque
+  // en ese momento el costo real de las frutas por bote aún no estaba
+  // resuelto (depende del redondeo compartido de esa fecha). Ahora que ya
+  // se resolvió, se re-reparte el precio proporcional al costo REAL de cada
+  // fruta — así ninguna fruta se ve "regalada" ni "con margen" de más solo
+  // por el reparto parejo; todas cargan el mismo % de margen que el
+  // producto completo.
+  var porNombreComercial = {};
+  Object.values(filas).forEach(function(f){
+    (porNombreComercial[f.nombreComercial] = porNombreComercial[f.nombreComercial] || []).push(f);
+  });
+  Object.keys(porNombreComercial).forEach(function(nombre){
+    var filasProd = porNombreComercial[nombre];
+    var frutasDistintas = {};
+    filasProd.forEach(function(f){ frutasDistintas[f.fruta] = 1; });
+    if (Object.keys(frutasDistintas).length < 2) return;
+    var totalImporte = filasProd.reduce(function(s,f){ return s+f.importe; }, 0);
+    var totalCosto = filasProd.reduce(function(s,f){ return s+f.costo; }, 0);
+    if (totalCosto <= 0) return;
+    filasProd.forEach(function(f){
+      f.importe = totalImporte * (f.costo / totalCosto);
+      f.precioVenta = f.cantidad > 0 ? Math.round((f.importe / f.cantidad) * 100) / 100 : f.precioVenta;
+    });
   });
   return Object.values(filas).sort(function(a,b){
     return a.fruta === b.fruta ? a.nombreComercial.localeCompare(b.nombreComercial) : a.fruta.localeCompare(b.fruta);

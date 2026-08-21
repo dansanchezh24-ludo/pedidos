@@ -27,17 +27,23 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 .clear-btn { background:rgba(255,100,100,0.15); border:1px solid rgba(255,100,100,0.3); border-radius:10px; color:#ff8a80; font-size:13px; padding:10px 14px; cursor:pointer; font-family:Georgia,serif; white-space:nowrap; }
 .refresh-btn { width:100%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); border-radius:10px; color:#5a8a5a; font-size:13px; padding:8px 0; cursor:pointer; font-family:Georgia,serif; }
 .cliente-table { width:100%; border-collapse:collapse; }
-.cliente-table td { overflow-wrap:break-word; word-break:break-word; }
+/* El texto (nombre de cliente/producto) puede partirse en varias líneas si
+   no cabe — pero un número (venta, utilidad, %, etc.) nunca debe partirse a
+   la mitad, se ve ilegible. Toda celda alineada a la derecha en este panel
+   es un número, así que se fuerza a una sola línea; el nowrap en :last-child
+   cubre las tablas (como Resumen) que usan ese selector en vez del inline. */
+.cliente-table td { overflow-wrap:break-word; }
+.cliente-table td[style*="text-align:right"] { white-space:nowrap; }
 .cliente-table th { color:#7ec87a; font-size:10px; letter-spacing:1px; padding:5px 6px; text-align:left; border-bottom:1px solid rgba(168,230,163,0.2); }
 .cliente-table th:last-child { text-align:right; }
 .cliente-row { border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; transition:background 0.15s; }
 .cliente-row:hover { background:rgba(76,175,80,0.08); }
 .cliente-row td { padding:6px 6px; font-size:13px; }
-.cliente-row td:last-child { text-align:right; color:#a8e6a3; font-weight:bold; }
+.cliente-row td:last-child { text-align:right; color:#a8e6a3; font-weight:bold; white-space:nowrap; }
 .cliente-name { color:#e8f5e8; font-weight:bold; }
 .cliente-sub { color:#6b9e6b; font-size:11px; margin-top:1px; }
 .detail-row td { padding:4px 6px 4px 24px; font-size:12px; color:#aaa; background:rgba(0,0,0,0.2); }
-.detail-row td:last-child { color:#a8e6a3; text-align:right; }
+.detail-row td:last-child { color:#a8e6a3; text-align:right; white-space:nowrap; }
 .total-row td { padding:8px 6px; font-weight:bold; border-top:2px solid rgba(168,230,163,0.3); color:#a8e6a3; }
 
 /* ── KPIs (Tablero) ── */
@@ -202,6 +208,7 @@ var presentacionExpandida = {}; // { "fruta||presentacionVendida": true|false } 
 var ordenDetalleVentas = "utilidadDesc"; // "alfabetico" | "ventaDesc" | "ventaAsc" | "utilidadDesc" | "utilidadAsc"
 var vistaDetalleVentas = "clientes"; // "clientes" | "familia" — filtra "DETALLE DE VENTAS POR PRODUCTO" a ventas a precio normal o a precio familiar/costo (ver esVentaFamiliar)
 var ordenProductosActuales = { campo:null, dir:"desc" }; // click en un encabezado de "PRODUCTOS ACTUALES — COMPRA VS VENTA" para ordenar por esa columna
+var ordenClientes = { campo:"utilidad", dir:"desc" }; // click en un encabezado de "UTILIDAD Y FRECUENCIA POR CLIENTE" para ordenar por esa columna
 
 document.getElementById("tabTablero").addEventListener("click",  function(){ switchTab("tablero"); });
 document.getElementById("tabResumen").addEventListener("click",  function(){ switchTab("resumen"); });
@@ -298,6 +305,60 @@ function calcularVentasPorCasa(datos) {
     resultado[ubic] = Object.entries(porUbicCasa[ubic]).sort(function(a,b){ return b[1]-a[1]; });
   });
   return resultado;
+}
+
+/**
+ * Utilidad y frecuencia de compra por cliente. El costo de cada línea se
+ * resuelve igual que en calcularTablaVentas (ver calcularCostoPorFrutaFecha)
+ * — cuando filasVenta ya trae el costo resuelto se usa directo, y cuando no
+ * (frutas por bote, cuyo costo depende del redondeo compartido de esa
+ * fecha) se toma la tarifa ya pooleada por fruta+fecha. El reparto parejo
+ * de precio entre frutas de un mismo pedido (ver calcularTablaVentas) no
+ * afecta este total: al sumar TODAS las líneas de un cliente, cómo se
+ * repartió el precio entre sus frutas no cambia lo que ese cliente pagó ni
+ * lo que costó surtirlo.
+ * Frecuencia = cada cuántos días compra en promedio, medido entre su
+ * primera y su última compra dividido entre (compras-1) — con una sola
+ * compra no hay frecuencia que calcular (null).
+ */
+function calcularUtilidadPorCliente(datos) {
+  var costoPorFrutaFecha = calcularCostoPorFrutaFecha(datos);
+  var porCliente = {};
+  datos.forEach(function(r){
+    var cliente = String(r[2] || "?").trim() || "?";
+    var fecha = fmtFecha(r[6]);
+    if (!porCliente[cliente]) porCliente[cliente] = { cliente:cliente, ventas:0, costo:0, checkouts:{} };
+    var c = porCliente[cliente];
+    filasVenta(r).forEach(function(f){
+      c.ventas += f.importe;
+      if (f.costo != null) {
+        c.costo += f.costo;
+      } else {
+        var rate = costoPorFrutaFecha[f.fruta + "||" + f.fecha] || 0;
+        c.costo += (f.cajas || 0) * rate;
+      }
+    });
+    if (fecha !== "Sin fecha") c.checkouts[fecha] = true;
+  });
+  return Object.values(porCliente).map(function(c){
+    var fechas = Object.keys(c.checkouts).sort();
+    var numCompras = fechas.length;
+    var frecuenciaDias = null;
+    if (numCompras > 1) {
+      var dias = (new Date(fechas[fechas.length-1]) - new Date(fechas[0])) / 86400000;
+      frecuenciaDias = dias / (numCompras - 1);
+    }
+    var utilidad = c.ventas - c.costo;
+    return {
+      cliente: c.cliente,
+      ventas: c.ventas,
+      costo: c.costo,
+      utilidad: utilidad,
+      pct: c.ventas > 0 ? (utilidad / c.ventas * 100) : 0,
+      numCompras: numCompras,
+      frecuenciaDias: frecuenciaDias
+    };
+  });
 }
 
 /**
@@ -948,6 +1009,51 @@ function renderTablero() {
     html += '</div>';
   });
 
+  // ── Utilidad y frecuencia de compra por cliente (ver calcularUtilidadPorCliente) ──
+  var CAMPOS_ORDEN_CLI = { cliente:"cliente", ventas:"ventas", utilidad:"utilidad", pct:"pct", compras:"numCompras", frecuencia:"frecuenciaDias" };
+  var clientesData = calcularUtilidadPorCliente(datos);
+  var campoOrdenCli = CAMPOS_ORDEN_CLI[ordenClientes.campo];
+  var dirMultCli = ordenClientes.dir === "desc" ? -1 : 1;
+  clientesData.sort(function(a,b){
+    if (campoOrdenCli === "cliente") return dirMultCli * a.cliente.localeCompare(b.cliente);
+    // Sin frecuencia (una sola compra) va siempre al final, sin importar el orden.
+    var av = a[campoOrdenCli], bv = b[campoOrdenCli];
+    if (av === null && bv === null) return 0;
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    return dirMultCli * (av - bv);
+  });
+  function thOrdenableCli(campo, label, alinDer) {
+    var activo = ordenClientes.campo === campo;
+    var flecha = activo ? (ordenClientes.dir === "desc" ? " ▼" : " ▲") : "";
+    // Sin table-layout:fixed a propósito: así el ancho de cada columna se
+    // ajusta a su contenido — los números (nowrap, ver CSS) nunca se
+    // parten, y el texto (CLIENTE) es el único que cede espacio envolviendo
+    // en varias líneas si hace falta.
+    return '<th class="th-ordenable-cli" data-campo-orden-cli="'+campo+'" style="white-space:nowrap;cursor:pointer;'+(alinDer?'text-align:right':'')+(activo?';color:#a8e6a3':'')+'">'+label+flecha+'</th>';
+  }
+  html += '<div class="kpi-block"><div class="kpi-block-title">UTILIDAD Y FRECUENCIA POR CLIENTE</div>';
+  html += '<div style="overflow-x:auto"><table class="cliente-table" style="font-size:12px"><thead><tr>'+
+    thOrdenableCli("cliente","CLIENTE",false)+
+    thOrdenableCli("ventas","VENTAS",true)+
+    thOrdenableCli("utilidad","UTILIDAD",true)+
+    thOrdenableCli("pct","%",true)+
+    thOrdenableCli("compras","COMPRAS",true)+
+    thOrdenableCli("frecuencia","CADA X DÍAS",true)+
+  '</tr></thead><tbody>';
+  clientesData.forEach(function(c){
+    var colorUtil = c.utilidad < 0 ? "#ff7070" : "#a8e6a3";
+    html += '<tr class="cliente-row" style="cursor:default">'+
+      '<td>'+c.cliente+'</td>'+
+      '<td style="text-align:right">$'+fmtMoney(c.ventas)+'</td>'+
+      '<td style="text-align:right;color:'+colorUtil+'">$'+fmtMoney(c.utilidad)+'</td>'+
+      '<td style="text-align:right;color:'+colorUtil+'">'+c.pct.toFixed(0)+'%</td>'+
+      '<td style="text-align:right">'+c.numCompras+'</td>'+
+      '<td style="text-align:right">'+(c.frecuenciaDias===null ? "—" : Math.round(c.frecuenciaDias)+"d")+'</td>'+
+    '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+
   // ── Detalle de ventas por producto (fruta · nombre comercial · presentación) ──
   // Agrupado por fruta (colapsado por default). El costo de cada línea ya
   // viene resuelto con precisión de fecha desde calcularTablaVentas (ver
@@ -1332,15 +1438,18 @@ function renderTablero() {
       return dirMult * (a[campoOrden] - b[campoOrden]);
     });
   }
-  var ANCHOS_ORDEN_PA = { producto:32, compra:17, venta:17, util:19, pct:15 };
   function thOrdenable(campo, label, alinDer) {
     var activo = ordenProductosActuales.campo === campo;
     var flecha = activo ? (ordenProductosActuales.dir === "desc" ? " ▼" : " ▲") : "";
-    return '<th class="th-ordenable" data-campo-orden="'+campo+'" style="width:'+ANCHOS_ORDEN_PA[campo]+'%;cursor:pointer;'+(alinDer?'text-align:right':'')+(activo?';color:#a8e6a3':'')+'">'+label+flecha+'</th>';
+    // Sin table-layout:fixed a propósito: así el ancho de cada columna se
+    // ajusta a su contenido — los números (nowrap, ver CSS) nunca se
+    // parten, y el texto (PRODUCTO) es el único que cede espacio envolviendo
+    // en varias líneas si hace falta.
+    return '<th class="th-ordenable" data-campo-orden="'+campo+'" style="white-space:nowrap;cursor:pointer;'+(alinDer?'text-align:right':'')+(activo?';color:#a8e6a3':'')+'">'+label+flecha+'</th>';
   }
 
-  html += '<div class="kpi-block"><div class="kpi-block-title">PRODUCTOS ACTUALES — COMPRA VS VENTA <span class="cliente-sub" style="font-weight:normal">(toca un encabezado para ordenar)</span></div>';
-  html += '<div style="overflow-x:auto"><table class="cliente-table" style="table-layout:fixed;font-size:12px"><thead><tr>'+
+  html += '<div class="kpi-block"><div class="kpi-block-title">PRODUCTOS ACTUALES — COMPRA VS VENTA</div>';
+  html += '<div style="overflow-x:auto"><table class="cliente-table" style="font-size:12px"><thead><tr>'+
     thOrdenable("producto","PRODUCTO",false)+
     thOrdenable("compra","COMPRA",true)+
     thOrdenable("venta","VENTA",true)+
@@ -1384,6 +1493,18 @@ function renderTablero() {
         // de mayor a menor, que es lo más útil para ver primero.
         ordenProductosActuales.campo = campo;
         ordenProductosActuales.dir = campo === "producto" ? "asc" : "desc";
+      }
+      renderTablero();
+    });
+  });
+  container.querySelectorAll(".th-ordenable-cli").forEach(function(th){
+    th.addEventListener("click", function(){
+      var campo = this.dataset.campoOrdenCli;
+      if (ordenClientes.campo === campo) {
+        ordenClientes.dir = ordenClientes.dir === "desc" ? "asc" : "desc";
+      } else {
+        ordenClientes.campo = campo;
+        ordenClientes.dir = campo === "cliente" ? "asc" : "desc";
       }
       renderTablero();
     });

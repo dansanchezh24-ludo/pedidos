@@ -213,7 +213,7 @@ var periodoAgrupacion = "semana"; // "semana" | "mes" — para la gráfica de Ta
 var casasExpandido = {}; // { ubicacion: true|false } — ver top 5 vs. lista completa por ubicación en "VENTAS POR CASA"
 var frutaExpandida = {}; // { fruta: true|false } — expandir/colapsar detalle de productos en "DETALLE DE VENTAS POR PRODUCTO"
 var presentacionExpandida = {}; // { "fruta||presentacionVendida": true|false } — expandir/colapsar el desglose por producto dentro de una presentación vendida (nivel 2 de "DETALLE DE VENTAS POR PRODUCTO")
-var ordenDetalleVentas = "utilidadDesc"; // "alfabetico" | "ventaDesc" | "ventaAsc" | "utilidadDesc" | "utilidadAsc"
+var ordenDetalle = { campo:"utilidad", dir:"desc" }; // click en un encabezado de "DETALLE DE VENTAS POR PRODUCTO" para ordenar por esa columna
 var vistaGlobal = "clientes"; // "clientes" | "familia" — filtra TODO el Tablero (todos los reportes) a ventas a precio normal o a precio familiar/costo, según la columna "Tipo" del Sheet (ver filtrarPorVistaGlobal)
 var ordenProductosActuales = { campo:null, dir:"desc" }; // click en un encabezado de "PRODUCTOS ACTUALES — COMPRA VS VENTA" para ordenar por esa columna
 var ordenClientes = { campo:"utilidad", dir:"desc" }; // click en un encabezado de "UTILIDAD Y FRECUENCIA POR CLIENTE" para ordenar por esa columna
@@ -783,6 +783,42 @@ function calcularVentasPorMes(datos) {
   return { frutas:frutas, meses:meses, datos:datosMatriz, totalesFruta:totalesFruta };
 }
 
+/**
+ * Igual que calcularVentasPorMes pero con utilidad (importe - costo) en vez
+ * de importe — el costo de cada línea se resuelve igual que en
+ * calcularUtilidadPorCliente (directo si filasVenta ya lo trae, o vía la
+ * tarifa pooleada por fruta+fecha cuando depende del redondeo a bote
+ * compartido de ese día).
+ */
+function calcularUtilidadPorMes(datos) {
+  var costoPorFrutaFecha = calcularCostoPorFrutaFecha(datos);
+  var celdas = {}; // "fruta||mes" -> utilidad
+  var totalesFruta = {};
+  var mesesSet = {};
+  datos.forEach(function(r) {
+    filasVenta(r).forEach(function(f){
+      var costo = f.costo;
+      if (costo == null) {
+        var rate = costoPorFrutaFecha[f.fruta + "||" + f.fecha] || 0;
+        costo = (f.cajas || 0) * rate;
+      }
+      var utilidad = f.importe - costo;
+      var key = f.fruta + "||" + f.mes;
+      celdas[key] = (celdas[key] || 0) + utilidad;
+      totalesFruta[f.fruta] = (totalesFruta[f.fruta] || 0) + utilidad;
+      mesesSet[f.mes] = true;
+    });
+  });
+  var frutas = Object.keys(totalesFruta).sort(function(a,b){ return totalesFruta[b] - totalesFruta[a]; });
+  var meses = Object.keys(mesesSet).filter(function(m){ return m !== "Sin fecha"; }).sort();
+  var datosMatriz = {};
+  frutas.forEach(function(fr){
+    datosMatriz[fr] = {};
+    meses.forEach(function(m){ datosMatriz[fr][m] = celdas[fr+"||"+m] || 0; });
+  });
+  return { frutas:frutas, meses:meses, datos:datosMatriz, totalesFruta:totalesFruta };
+}
+
 // Devuelve la fecha (YYYY-MM-DD) del lunes de la semana que contiene `fecha`.
 function claveSemana(fecha) {
   var d = new Date(fecha + "T00:00:00");
@@ -1006,13 +1042,14 @@ function renderTablero() {
   // Separado por ubicación (Azaleas/El Sereno/General), igual que "VENTAS
   // POR CASA" — el mismo orden (click en encabezado) aplica dentro de cada
   // ubicación, no mezcla clientes de ubicaciones distintas en una sola tabla.
-  var CAMPOS_ORDEN_CLI = { cliente:"cliente", ventas:"ventas", utilidad:"utilidad", pct:"pct", compras:"numCompras", frecuencia:"frecuenciaDias" };
+  var CAMPOS_ORDEN_CLI = { cliente:"cliente", casa:"casa", ventas:"ventas", utilidad:"utilidad", pct:"pct", compras:"numCompras", frecuencia:"frecuenciaDias" };
+  var CAMPOS_TEXTO_CLI = ["cliente","casa"]; // se ordenan alfabéticamente, no numéricamente
   var clientesData = calcularUtilidadPorCliente(datos);
   var campoOrdenCli = CAMPOS_ORDEN_CLI[ordenClientes.campo];
   var dirMultCli = ordenClientes.dir === "desc" ? -1 : 1;
   function ordenarClientes(lista) {
     lista.sort(function(a,b){
-      if (campoOrdenCli === "cliente") return dirMultCli * a.cliente.localeCompare(b.cliente);
+      if (CAMPOS_TEXTO_CLI.indexOf(campoOrdenCli) !== -1) return dirMultCli * String(a[campoOrdenCli]||"").localeCompare(String(b[campoOrdenCli]||""));
       // Sin frecuencia (una sola compra) va siempre al final, sin importar el orden.
       var av = a[campoOrdenCli], bv = b[campoOrdenCli];
       if (av === null && bv === null) return 0;
@@ -1051,7 +1088,7 @@ function renderTablero() {
     '</div>';
     html += '<div style="overflow-x:auto"><table class="cliente-table" style="font-size:12px"><thead><tr>'+
       thOrdenableCli("cliente","CLIENTE",false)+
-      '<th style="white-space:nowrap">CASA</th>'+
+      thOrdenableCli("casa","CASA",false)+
       thOrdenableCli("ventas","VENTAS",true)+
       thOrdenableCli("utilidad","UTILIDAD",true)+
       thOrdenableCli("pct","%",true)+
@@ -1182,41 +1219,27 @@ function renderTablero() {
     var totalUtilidad = totalImporte - totalCosto;
     var totalPct = totalImporte > 0 ? (totalUtilidad / totalImporte * 100) : 0;
 
-    var comparadores = {
-      alfabetico:   function(a,b,campo){ return a[campo].localeCompare(b[campo]); },
-      ventaDesc:    function(a,b){ return b.importe - a.importe; },
-      ventaAsc:     function(a,b){ return a.importe - b.importe; },
-      utilidadDesc: function(a,b){ return b.utilidad - a.utilidad; },
-      utilidadAsc:  function(a,b){ return a.utilidad - b.utilidad; },
-      pctDesc:      function(a,b){ return b.pct - a.pct; },
-      pctAsc:       function(a,b){ return a.pct - b.pct; }
-    };
-
+    var CAMPOS_ORDEN_DET = { producto:"fruta", utilidad:"utilidad", pct:"pct", cantidad:"cantidad", venta:"importe" };
+    var CAMPOS_TEXTO_DET = ["producto"];
+    var campoOrdenDet = CAMPOS_ORDEN_DET[ordenDetalle.campo] || "utilidad";
+    var dirMultDet = ordenDetalle.dir === "desc" ? -1 : 1;
     grupos.sort(function(a,b){
-      var cmp = comparadores[ordenDetalleVentas] || comparadores.alfabetico;
-      return cmp(a, b, "fruta");
+      if (CAMPOS_TEXTO_DET.indexOf(ordenDetalle.campo) !== -1) return dirMultDet * a[campoOrdenDet].localeCompare(b[campoOrdenDet]);
+      return dirMultDet * (a[campoOrdenDet] - b[campoOrdenDet]);
     });
+    function thOrdenableDet(campo, label, alinDer) {
+      var activo = ordenDetalle.campo === campo;
+      var flecha = activo ? (ordenDetalle.dir === "desc" ? " ▼" : " ▲") : "";
+      return '<th class="th-ordenable-det" data-campo-orden-det="'+campo+'" style="white-space:nowrap;cursor:pointer;'+(alinDer?'text-align:right':'')+(activo?';color:#a8e6a3':'')+'">'+label+flecha+'</th>';
+    }
 
-    html += '<div class="kpi-block"><div class="kpi-block-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
-      '<span>DETALLE DE VENTAS POR PRODUCTO</span>'+
-      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
-        '<select id="ordenDetalleSelect" style="background:rgba(0,0,0,0.3);border:1px solid rgba(168,230,163,0.25);border-radius:8px;color:#a8e6a3;font-size:11px;padding:5px 8px;font-family:Georgia,serif">'+
-          '<option value="alfabetico"'+(ordenDetalleVentas==="alfabetico"?" selected":"")+'>A-Z</option>'+
-          '<option value="ventaDesc"'+(ordenDetalleVentas==="ventaDesc"?" selected":"")+'>Venta: mayor a menor</option>'+
-          '<option value="ventaAsc"'+(ordenDetalleVentas==="ventaAsc"?" selected":"")+'>Venta: menor a mayor</option>'+
-          '<option value="utilidadDesc"'+(ordenDetalleVentas==="utilidadDesc"?" selected":"")+'>Utilidad $: mayor a menor</option>'+
-          '<option value="utilidadAsc"'+(ordenDetalleVentas==="utilidadAsc"?" selected":"")+'>Utilidad $: menor a mayor</option>'+
-          '<option value="pctDesc"'+(ordenDetalleVentas==="pctDesc"?" selected":"")+'>% Utilidad: mayor a menor</option>'+
-          '<option value="pctAsc"'+(ordenDetalleVentas==="pctAsc"?" selected":"")+'>% Utilidad: menor a mayor</option>'+
-        '</select>'+
-      '</div>'+
-    '</div>';
+    html += '<div class="kpi-block"><div class="kpi-block-title">DETALLE DE VENTAS POR PRODUCTO</div>';
 
     html += '<div style="overflow-x:auto"><table class="cliente-table" style="white-space:nowrap"><thead><tr>'+
-      '<th>PRODUCTO</th>'+
-      '<th style="text-align:right">$ UTILIDAD</th><th style="text-align:right">% UTILIDAD</th>'+
-      '<th style="text-align:right">CANT. VENDIDA</th><th>UNIDAD</th>'+
-      '<th style="text-align:right">TOTAL VENTA</th><th style="text-align:right">PRECIO VENTA</th>'+
+      thOrdenableDet("producto","PRODUCTO",false)+
+      thOrdenableDet("utilidad","$ UTILIDAD",true)+thOrdenableDet("pct","% UTILIDAD",true)+
+      thOrdenableDet("cantidad","CANT. VENDIDA",true)+'<th>UNIDAD</th>'+
+      thOrdenableDet("venta","TOTAL VENTA",true)+'<th style="text-align:right">PRECIO VENTA</th>'+
       '<th style="text-align:right">COSTO TOTAL</th><th style="text-align:right">COSTO UNITARIO</th>'+
     '</tr></thead><tbody>';
 
@@ -1356,6 +1379,42 @@ function renderTablero() {
     html += '</tbody></table></div></div>';
   }
 
+  // ── Utilidades por mes y fruta (mismo formato, pero con utilidad — puede
+  // salir negativa, así que las celdas también pintan de rojo). ──
+  var um = calcularUtilidadPorMes(datos);
+  if (um.frutas.length && um.meses.length) {
+    var maxCeldaUtil = 0, minCeldaUtil = 0;
+    um.frutas.forEach(function(fr){ um.meses.forEach(function(m){
+      maxCeldaUtil = Math.max(maxCeldaUtil, um.datos[fr][m]);
+      minCeldaUtil = Math.min(minCeldaUtil, um.datos[fr][m]);
+    }); });
+    html += '<div class="kpi-block"><div class="kpi-block-title">UTILIDADES POR MES Y FRUTA</div>';
+    html += '<div style="overflow-x:auto"><table class="cliente-table" style="white-space:nowrap">';
+    html += '<thead><tr><th>FRUTA</th>';
+    um.meses.forEach(function(m){ html += '<th style="text-align:right">'+fmtMesLabel(m)+'</th>'; });
+    html += '<th style="text-align:right">TOTAL</th></tr></thead><tbody>';
+    um.frutas.forEach(function(fr){
+      html += '<tr class="cliente-row" style="cursor:default"><td>'+fr+'</td>';
+      um.meses.forEach(function(m){
+        var v = um.datos[fr][m];
+        var bg = 'transparent', color = '';
+        if (v > 0) { var pct = maxCeldaUtil>0 ? v/maxCeldaUtil*100 : 0; bg = 'rgba(76,175,80,'+(0.08+0.35*pct/100).toFixed(2)+')'; }
+        else if (v < 0) { var pctNeg = minCeldaUtil<0 ? v/minCeldaUtil*100 : 0; bg = 'rgba(255,112,112,'+(0.08+0.35*pctNeg/100).toFixed(2)+')'; color = 'color:#ff7070'; }
+        html += '<td style="text-align:right;background:'+bg+';'+color+'">'+(v!==0?'$'+fmtMoney(v):'—')+'</td>';
+      });
+      var colorTotalFr = um.totalesFruta[fr] < 0 ? '#ff7070' : '#a8e6a3';
+      html += '<td style="text-align:right;font-weight:bold;color:'+colorTotalFr+'">$'+fmtMoney(um.totalesFruta[fr])+'</td></tr>';
+    });
+    var totalGeneralUtil = 0;
+    html += '<tr class="total-row"><td>TOTAL</td>';
+    um.meses.forEach(function(m){
+      var totalMesUtil = um.frutas.reduce(function(s,fr){ return s+um.datos[fr][m]; },0);
+      totalGeneralUtil += totalMesUtil;
+      html += '<td style="text-align:right;'+(totalMesUtil<0?'color:#ff7070':'')+'">$'+fmtMoney(totalMesUtil)+'</td>';
+    });
+    html += '<td style="text-align:right;'+(totalGeneralUtil<0?'color:#ff7070':'')+'">$'+fmtMoney(totalGeneralUtil)+'</td></tr>';
+    html += '</tbody></table></div></div>';
+  }
 
   container.innerHTML = html;
   container.querySelectorAll(".periodo-btn").forEach(function(btn){
@@ -1391,18 +1450,27 @@ function renderTablero() {
         ordenClientes.dir = ordenClientes.dir === "desc" ? "asc" : "desc";
       } else {
         ordenClientes.campo = campo;
-        ordenClientes.dir = campo === "cliente" ? "asc" : "desc";
+        // Texto (cliente/casa) arranca A-Z; columnas numéricas arrancan de
+        // mayor a menor, que es lo más útil para ver primero.
+        ordenClientes.dir = (campo === "cliente" || campo === "casa") ? "asc" : "desc";
       }
       renderTablero();
     });
   });
-  var ordenSelect = container.querySelector("#ordenDetalleSelect");
-  if (ordenSelect) {
-    ordenSelect.addEventListener("change", function(){
-      ordenDetalleVentas = this.value;
+  container.querySelectorAll(".th-ordenable-det").forEach(function(th){
+    th.addEventListener("click", function(){
+      var campo = this.dataset.campoOrdenDet;
+      if (ordenDetalle.campo === campo) {
+        ordenDetalle.dir = ordenDetalle.dir === "desc" ? "asc" : "desc";
+      } else {
+        ordenDetalle.campo = campo;
+        // Texto (producto) arranca A-Z; columnas numéricas arrancan de mayor
+        // a menor, que es lo más útil para ver primero.
+        ordenDetalle.dir = campo === "producto" ? "asc" : "desc";
+      }
       renderTablero();
     });
-  }
+  });
   container.querySelectorAll(".vista-global-btn").forEach(function(btn){
     btn.addEventListener("click", function(){
       vistaGlobal = this.dataset.vista;

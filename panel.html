@@ -102,6 +102,8 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 .pagado-si { background:rgba(76,175,80,0.2); color:#a8e6a3; }
 .pagado-no { background:rgba(255,183,77,0.15); color:#ffb74d; }
 .pagado-pill:active { opacity:0.7; }
+.editar-cliente-pill { cursor:pointer; margin-left:6px; font-size:12px; opacity:0.7; }
+.editar-cliente-pill:active { opacity:0.4; }
 /* Pedido para proveedor */
 .pedido-box { background:rgba(0,0,0,0.35); border:1px solid rgba(168,230,163,0.2); border-radius:14px; padding:16px 18px; }
 .pedido-box-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
@@ -187,7 +189,7 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 </div>
 
 <script>
-var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwIqpDQvGr7pstVMRWJt-yPIvRfy5EqGQRWSV9oJBTPzrSzeP3Fzbkt5RS2od0Sl949/exec";
+var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuUQb9pC2k9gG_wLKlf6gNtDc_c-GhQQgsFOEPPC0EZqwOWIzgFnB9ivBe01HqWVf1/exec";
 
 // HIST_COSTO_*, CAJAS_POR_BOTE, costoVigente, isBerry, precioBaseUnidad,
 // cantidadAKg, parseSufijoUnidad provienen de config.js
@@ -206,7 +208,7 @@ var casasExpandido = {}; // { ubicacion: true|false } — ver top 5 vs. lista co
 var frutaExpandida = {}; // { fruta: true|false } — expandir/colapsar detalle de productos en "DETALLE DE VENTAS POR PRODUCTO"
 var presentacionExpandida = {}; // { "fruta||presentacionVendida": true|false } — expandir/colapsar el desglose por producto dentro de una presentación vendida (nivel 2 de "DETALLE DE VENTAS POR PRODUCTO")
 var ordenDetalleVentas = "utilidadDesc"; // "alfabetico" | "ventaDesc" | "ventaAsc" | "utilidadDesc" | "utilidadAsc"
-var vistaDetalleVentas = "clientes"; // "clientes" | "familia" — filtra "DETALLE DE VENTAS POR PRODUCTO" a ventas a precio normal o a precio familiar/costo (ver esVentaFamiliar)
+var vistaGlobal = "clientes"; // "clientes" | "familia" — filtra TODO el Tablero (todos los reportes) a ventas a precio normal o a precio familiar/costo, según la columna "Tipo" del Sheet (ver filtrarPorVistaGlobal)
 var ordenProductosActuales = { campo:null, dir:"desc" }; // click en un encabezado de "PRODUCTOS ACTUALES — COMPRA VS VENTA" para ordenar por esa columna
 var ordenClientes = { campo:"utilidad", dir:"desc" }; // click en un encabezado de "UTILIDAD Y FRECUENCIA POR CLIENTE" para ordenar por esa columna
 
@@ -701,49 +703,18 @@ function costoUnitarioPorVendida(f) {
   return f.costoUnitarioNominal / factor;
 }
 
-// Clasifica cada fila de una tabla de ventas (ver calcularTablaVentas) como
-// venta a "familia" (precio de costo/cortesía) o "cliente" (precio normal).
-// No hay una columna que marque "esto se vendió a precio familiar" en el
-// Sheet, así que se infiere comparando el precio unitario vendido contra el
-// costo — si el cliente pagó al costo (o menos, con 1% de tolerancia por
-// redondeo), es familia; si pagó más (el caso normal, con margen), es
-// cliente. Ludo Berry Mix/Max se clasifican como PAQUETE COMPLETO (suma de
-// todas sus frutas), no fruta por fruta — un pedido de Max reparte su
-// precio entre 4 frutas de costo distinto, así que comparar cada fruta
-// contra su fracción pareja del precio la haría ver "regalada" o "con
-// margen de más" aunque el pedido completo se vendió a precio normal.
-// Select/3-Pack NO entran en esa excepción — cada pedido es de una sola
-// fruta a precio completo, se clasifica bien fila por fila.
-function crearClasificadorFamiliar(tabla) {
-  var totalesPorPaquete = {};
-  tabla.forEach(function(f){
-    if (PRODUCTOS_MULTIFRUTA.indexOf(f.nombreComercial) === -1) return;
-    if (!totalesPorPaquete[f.nombreComercial]) totalesPorPaquete[f.nombreComercial] = { importe:0, costo:0 };
-    totalesPorPaquete[f.nombreComercial].importe += f.importe;
-    totalesPorPaquete[f.nombreComercial].costo += f.costo;
+// Columna N (índice 13) del Sheet: "Cliente" o "Familia" — se guarda ya
+// resuelta desde index.html (toggle "Normal"/"Precio familiar") al capturar
+// el pedido, y los pedidos históricos se rellenaron una vez con un cálculo
+// equivalente. Ya no hace falta inferirlo comparando precio contra costo en
+// cada reporte — un solo filtro aquí decide qué ve TODO el Tablero (ver
+// vistaGlobal). Blanco (pedidos capturados antes de que existiera la
+// columna, o de un despliegue viejo) se trata como "Cliente" por defecto.
+function filtrarPorVistaGlobal(datos, vista) {
+  return datos.filter(function(r){
+    var esFamilia = String(r[13] || "").trim() === "Familia";
+    return vista === "familia" ? esFamilia : !esFamilia;
   });
-  return function esVentaFamiliar(f) {
-    if (PRODUCTOS_MULTIFRUTA.indexOf(f.nombreComercial) !== -1) {
-      var t = totalesPorPaquete[f.nombreComercial];
-      return !!t && t.importe > 0 && t.importe <= t.costo * 1.01;
-    }
-    var nominalPorUnidadVendida = costoUnitarioPorVendida(f);
-    return nominalPorUnidadVendida > 0 && f.precioVenta <= nominalPorUnidadVendida * 1.01;
-  };
-}
-
-// Ventas/costo/utilidad totales que se vendieron a precio de familia (ver
-// crearClasificadorFamiliar) — usado para desglosar los KPI de arriba
-// (Ventas Totales/Pago a Proveedor/Utilidad Neta) en Clientes vs Familia.
-function calcularVentasFamiliar(datos) {
-  var tabla = calcularTablaVentas(datos);
-  var esVentaFamiliar = crearClasificadorFamiliar(tabla);
-  var out = { ventas:0, costo:0 };
-  tabla.forEach(function(f){
-    if (esVentaFamiliar(f)) { out.ventas += f.importe; out.costo += f.costo; }
-  });
-  out.utilidad = out.ventas - out.costo;
-  return out;
 }
 
 // Formatea una fecha "YYYY-MM-DD" como "5 jun '26".
@@ -858,17 +829,6 @@ function calcularVentasPorPeriodo(datos, agrupacion) {
 function kpiCard(label, val, cls) {
   return '<div class="kpi-card"><div class="kpi-label">'+label+'</div><div class="kpi-val '+(cls||'')+'">'+val+'</div></div>';
 }
-// Tarjeta KPI con el total de siempre, más un desglose Clientes/Familia
-// abajo — para ver de un vistazo cuánto de la venta/costo/utilidad viene de
-// precio normal vs precio de costo (cortesía a familia).
-function kpiCardDesglose(label, val, cls, cliente, familia) {
-  return '<div class="kpi-card"><div class="kpi-label">'+label+'</div><div class="kpi-val '+(cls||'')+'">'+val+'</div>'+
-    '<div style="display:flex;gap:12px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(168,230,163,0.12)">'+
-      '<div style="flex:1"><div style="font-size:9px;color:#6b9e6b;letter-spacing:1px">CLIENTES</div><div style="font-size:13px;font-weight:bold;color:#e8f5e8">$'+fmtMoney(cliente)+'</div></div>'+
-      '<div style="flex:1"><div style="font-size:9px;color:#6b9e6b;letter-spacing:1px">FAMILIA</div><div style="font-size:13px;font-weight:bold;color:#e8f5e8">$'+fmtMoney(familia)+'</div></div>'+
-    '</div>'+
-  '</div>';
-}
 // Ticket promedio por checkout (ver numPedidos en calcularKPIsGlobal),
 // desglosado en venta/utilidad/% ganancia — cuánto deja en promedio cada
 // compra completa, no cada línea de producto.
@@ -913,7 +873,7 @@ function renderTablero() {
   var hasta = document.getElementById("kpiHasta").value;
   var container = document.getElementById("kpiContent");
 
-  var datos = kpiData.filter(function(r){
+  var datosSinFiltrarTipo = kpiData.filter(function(r){
     var f = fmtFecha(r[6]);
     if (f === "Sin fecha") return false;
     if (desde && f < desde) return false;
@@ -921,22 +881,34 @@ function renderTablero() {
     return true;
   });
 
-  if (datos.length === 0) {
+  if (datosSinFiltrarTipo.length === 0) {
     container.innerHTML = "<p style='text-align:center;color:#5a8a5a;padding:40px'>No hay pedidos en este rango</p>";
+    return;
+  }
+
+  // TODO el tablero (cada reporte de aquí para abajo) se calcula sobre el
+  // subconjunto Cliente o Familia según vistaGlobal — un solo filtro arriba
+  // en vez de que cada reporte tenga su propio toggle (ver filtrarPorVistaGlobal).
+  var datos = filtrarPorVistaGlobal(datosSinFiltrarTipo, vistaGlobal);
+
+  var html = "";
+  html += '<div class="periodo-toggle" style="margin-bottom:14px">'+
+    '<button class="periodo-btn vista-global-btn'+(vistaGlobal==="clientes"?" active":"")+'" data-vista="clientes">👥 Clientes</button>'+
+    '<button class="periodo-btn vista-global-btn'+(vistaGlobal==="familia"?" active":"")+'" data-vista="familia">🤝 Familia</button>'+
+  '</div>';
+
+  if (datos.length === 0) {
+    html += "<p style='text-align:center;color:#5a8a5a;padding:40px'>No hay pedidos de "+(vistaGlobal==="familia"?"familia":"clientes")+" en este rango</p>";
+    container.innerHTML = html;
+    container.querySelectorAll(".vista-global-btn").forEach(function(btn){
+      btn.addEventListener("click", function(){ vistaGlobal = this.dataset.vista; renderTablero(); });
+    });
     return;
   }
 
   var k = calcularKPIsGlobal(datos);
   var rangoLabel = (desde||hasta) ? ((desde||"inicio")+" → "+(hasta||"hoy")) : "TODO EL HISTORIAL · "+k.numFechas+" fecha"+(k.numFechas!==1?"s":"")+" con entrega";
-  // Desglose Clientes vs Familia de los 3 KPI principales — la parte de
-  // Familia se calcula directo (ver calcularVentasFamiliar) y Clientes se
-  // obtiene por resta contra el total ya calculado arriba (k.*), para que
-  // los dos números SIEMPRE sumen exacto al total mostrado sin importar
-  // pequeñas diferencias de redondeo entre ambos cálculos.
-  var famKPI = calcularVentasFamiliar(datos);
-  var cliKPI = { ventas: k.ventasTotales - famKPI.ventas, costo: k.pagoProveedorTotal - famKPI.costo, utilidad: k.utilidadNeta - famKPI.utilidad };
 
-  var html = "";
   html += '<p class="kpi-rango">'+rangoLabel+'</p>';
 
   // Ticket promedio = por checkout (numPedidos, ver calcularKPIsGlobal), no
@@ -950,9 +922,9 @@ function renderTablero() {
   var utilidadPorDia = k.numFechas > 0 ? k.utilidadNeta / k.numFechas : 0;
 
   html += '<div class="kpi-grid">';
-  html += kpiCardDesglose("VENTAS TOTALES", "$"+fmtMoney(k.ventasTotales), "", cliKPI.ventas, famKPI.ventas);
-  html += kpiCardDesglose("PAGO A PROVEEDOR", "$"+fmtMoney(k.pagoProveedorTotal), "naranja", cliKPI.costo, famKPI.costo);
-  html += kpiCardDesglose("UTILIDAD NETA", "$"+fmtMoney(k.utilidadNeta), k.utilidadNeta<0 ? "rojo" : "", cliKPI.utilidad, famKPI.utilidad);
+  html += kpiCard("VENTAS TOTALES", "$"+fmtMoney(k.ventasTotales));
+  html += kpiCard("PAGO A PROVEEDOR", "$"+fmtMoney(k.pagoProveedorTotal), "naranja");
+  html += kpiCard("UTILIDAD NETA", "$"+fmtMoney(k.utilidadNeta), k.utilidadNeta<0 ? "rojo" : "");
   html += kpiCardPresentacion("PRODUCTOS VENDIDOS", k.porPresentacion);
   html += '</div>';
 
@@ -1060,16 +1032,12 @@ function renderTablero() {
   // calcularCostoPorFrutaFecha) — cada fecha de entrega carga solo su propio
   // redondeo a bote, nunca el de otra fecha. El subtotal por fruta es exacto.
   //
-  // La tabla se filtra en dos pestañas — "Clientes" (precio normal) y
-  // "Familia" (precio de costo/familiar) — en vez de mezclarlas: una venta a
-  // precio familiar tiene margen ~0 por diseño (es una cortesía, no un error
-  // de precio), así que mezclarla con ventas normales solo diluye el margen
-  // real del negocio sin decir nada útil (ver crearClasificadorFamiliar).
-  var tablaCompleta = calcularTablaVentas(datos);
-  var esVentaFamiliar = crearClasificadorFamiliar(tablaCompleta);
-  var tabla = tablaCompleta.filter(function(f){
-    return vistaDetalleVentas === "familia" ? esVentaFamiliar(f) : !esVentaFamiliar(f);
-  });
+  // "datos" ya viene filtrado por Cliente/Familia desde el toggle global de
+  // arriba (ver filtrarPorVistaGlobal), así que no hace falta filtrar de
+  // nuevo aquí — una venta a precio familiar tiene margen ~0 por diseño (es
+  // una cortesía, no un error de precio), así que mezclarla con ventas
+  // normales solo diluiría el margen real del negocio sin decir nada útil.
+  var tabla = calcularTablaVentas(datos);
   // Algunos tramos de costo en config.js arrancan en una fecha "sentinel"
   // (ej. "2000-01-01") que solo significa "el costo base, desde antes de
   // que hubiera historial" — nunca una fecha real de operación. Al mostrar
@@ -1185,10 +1153,6 @@ function renderTablero() {
     html += '<div class="kpi-block"><div class="kpi-block-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
       '<span>DETALLE DE VENTAS POR PRODUCTO</span>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
-        '<div class="periodo-toggle">'+
-          '<button class="periodo-btn vista-toggle-btn'+(vistaDetalleVentas==="clientes"?" active":"")+'" data-vista="clientes">Clientes</button>'+
-          '<button class="periodo-btn vista-toggle-btn'+(vistaDetalleVentas==="familia"?" active":"")+'" data-vista="familia">Familia</button>'+
-        '</div>'+
         '<select id="ordenDetalleSelect" style="background:rgba(0,0,0,0.3);border:1px solid rgba(168,230,163,0.25);border-radius:8px;color:#a8e6a3;font-size:11px;padding:5px 8px;font-family:Georgia,serif">'+
           '<option value="alfabetico"'+(ordenDetalleVentas==="alfabetico"?" selected":"")+'>A-Z</option>'+
           '<option value="ventaDesc"'+(ordenDetalleVentas==="ventaDesc"?" selected":"")+'>Venta: mayor a menor</option>'+
@@ -1516,9 +1480,9 @@ function renderTablero() {
       renderTablero();
     });
   }
-  container.querySelectorAll(".vista-toggle-btn").forEach(function(btn){
+  container.querySelectorAll(".vista-global-btn").forEach(function(btn){
     btn.addEventListener("click", function(){
-      vistaDetalleVentas = this.dataset.vista;
+      vistaGlobal = this.dataset.vista;
       renderTablero();
     });
   });
@@ -1692,8 +1656,15 @@ function renderResumen() {
     var pagadoTag=info.pagado
       ? '<span class="pagado-pill pagado-si" data-cliente="'+nombre.replace(/"/g,"&quot;")+'" data-estado="pagado">✅ Pagado</span>'
       : '<span class="pagado-pill pagado-no" data-cliente="'+nombre.replace(/"/g,"&quot;")+'" data-estado="pendiente">⏳ Pendiente</span>';
+    // Renombrar cliente solo tiene sentido con UNA fecha específica filtrada
+    // (ver editarCliente en Apps Script — hace match por cliente+fecha
+    // exacta) — con "todas las fechas" no hay forma de saber cuál pedido de
+    // ese cliente se quiere corregir, así que el lápiz no se muestra.
+    var editarTag = filtro
+      ? '<span class="editar-cliente-pill" data-cliente="'+nombre.replace(/"/g,"&quot;")+'" title="Corregir nombre de cliente de este pedido">✏️</span>'
+      : '';
     tr.innerHTML=
-      '<td><div class="cliente-name">'+nombre+ubiTag+horaTag+'</div>'+direccionTag+'<div class="cliente-sub">'+info.items.length+' producto'+(info.items.length!==1?"s":"")+'</div></td>'+
+      '<td><div class="cliente-name">'+nombre+editarTag+ubiTag+horaTag+'</div>'+direccionTag+'<div class="cliente-sub">'+info.items.length+' producto'+(info.items.length!==1?"s":"")+'</div></td>'+
       '<td style="color:#6b9e6b;font-size:13px">'+(isOpen?"▲":"▼")+'</td>'+
       '<td>$'+fmtMoney(info.total)+'<div style="margin-top:4px">'+pagadoTag+'</div></td>';
     tr.addEventListener("click",function(){expandido=(expandido===nombre)?null:nombre;renderResumen();});
@@ -1723,6 +1694,17 @@ function renderResumen() {
       togglePagado(cliente, filtro, nuevoEstado);
     });
   });
+  container.querySelectorAll(".editar-cliente-pill").forEach(function(el){
+    el.addEventListener("click", function(ev){
+      ev.stopPropagation(); // no togglear la fila (expandir/colapsar) al tocar el lápiz
+      var cliente = this.dataset.cliente;
+      var nombreNuevo = prompt('Corregir nombre de cliente para el pedido del '+filtro+':', cliente);
+      if (nombreNuevo === null) return; // canceló
+      nombreNuevo = nombreNuevo.trim();
+      if (!nombreNuevo || nombreNuevo === cliente) return;
+      renombrarCliente(cliente, filtro, nombreNuevo);
+    });
+  });
 }
 
 /**
@@ -1739,6 +1721,22 @@ function togglePagado(cliente, fecha, nuevoEstado) {
   });
   renderResumen();
   fetch(SCRIPT_URL+"?action=marcarPagado&cliente="+encodeURIComponent(cliente)+"&fecha="+encodeURIComponent(fecha)+"&estado="+nuevoEstado, {mode:"no-cors"});
+}
+
+/**
+ * Renombra (columna C en Sheets) todas las filas de un cliente en una fecha
+ * de entrega — ej. corregir un pedido capturado con el nombre equivocado
+ * (ver editarCliente en Apps Script). Mismo patrón fire-and-forget que
+ * togglePagado: actualiza la vista local de inmediato y manda el cambio en
+ * segundo plano, ya que el fetch va con mode:"no-cors".
+ */
+function renombrarCliente(clienteActual, fecha, clienteNuevo) {
+  resumenData.forEach(function(r){
+    if ((r[2]||"").trim() === clienteActual && fmtFecha(r[6]) === fecha) r[2] = clienteNuevo;
+  });
+  if (expandido === clienteActual) expandido = clienteNuevo;
+  renderResumen();
+  fetch(SCRIPT_URL+"?action=editarCliente&clienteActual="+encodeURIComponent(clienteActual)+"&fecha="+encodeURIComponent(fecha)+"&clienteNuevo="+encodeURIComponent(clienteNuevo), {mode:"no-cors"});
 }
 
 // ═══════════════════════════════════════════

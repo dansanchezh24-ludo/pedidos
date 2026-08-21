@@ -106,7 +106,7 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 </div>
 
 <script>
-var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwIqpDQvGr7pstVMRWJt-yPIvRfy5EqGQRWSV9oJBTPzrSzeP3Fzbkt5RS2od0Sl949/exec";
+var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuUQb9pC2k9gG_wLKlf6gNtDc_c-GhQQgsFOEPPC0EZqwOWIzgFnB9ivBe01HqWVf1/exec";
 // CATALOGO, FRUTAS y costos provienen de config.js
 
 function getCat(id) { return CATALOGO.find(function(c){return c.id===id;})||CATALOGO[0]; }
@@ -522,7 +522,8 @@ async function guardar() {
       var nombre=nombreCompleto(it);
       var precio=precioUnitario(cat, it);
       var v=precio*it.cantidad; var s=calcularCostoLinea(cat, it);
-      return [nombre,it.cantidad,cliente,precio,v,"Pendiente",fecha,s,s,v-s,ubicacion,direccion,horaEntrega];
+      var tipo=precioFamiliar?"Familia":"Cliente";
+      return [nombre,it.cantidad,cliente,precio,v,"Pendiente",fecha,s,s,v-s,ubicacion,direccion,horaEntrega,tipo];
     });
     await fetch(SCRIPT_URL+"?data="+encodeURIComponent(JSON.stringify(filas)),{mode:"no-cors"});
     var total=items.reduce(function(s,it){return s+calcularPrecioLinea(getCat(it.catId),it);},0);

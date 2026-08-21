@@ -329,7 +329,10 @@ function calcularUtilidadPorCliente(datos) {
   datos.forEach(function(r){
     var cliente = String(r[2] || "?").trim() || "?";
     var fecha = fmtFecha(r[6]);
-    if (!porCliente[cliente]) porCliente[cliente] = { cliente:cliente, ventas:0, costo:0, checkouts:{} };
+    // ubicación/casa: se toma del PRIMER pedido de ese cliente (igual que
+    // Resumen) — un cliente normalmente vive en una sola casa, así que no
+    // hace falta rastrear cambios.
+    if (!porCliente[cliente]) porCliente[cliente] = { cliente:cliente, ventas:0, costo:0, checkouts:{}, ubicacion: r[10]||"Sin ubicación", casa: r[11]||"" };
     var c = porCliente[cliente];
     filasVenta(r).forEach(function(f){
       c.ventas += f.importe;
@@ -353,6 +356,8 @@ function calcularUtilidadPorCliente(datos) {
     var utilidad = c.ventas - c.costo;
     return {
       cliente: c.cliente,
+      ubicacion: c.ubicacion,
+      casa: c.casa,
       ventas: c.ventas,
       costo: c.costo,
       utilidad: utilidad,
@@ -982,49 +987,70 @@ function renderTablero() {
   });
 
   // ── Utilidad y frecuencia de compra por cliente (ver calcularUtilidadPorCliente) ──
+  // Separado por ubicación (Azaleas/El Sereno/General), igual que "VENTAS
+  // POR CASA" — el mismo orden (click en encabezado) aplica dentro de cada
+  // ubicación, no mezcla clientes de ubicaciones distintas en una sola tabla.
   var CAMPOS_ORDEN_CLI = { cliente:"cliente", ventas:"ventas", utilidad:"utilidad", pct:"pct", compras:"numCompras", frecuencia:"frecuenciaDias" };
   var clientesData = calcularUtilidadPorCliente(datos);
   var campoOrdenCli = CAMPOS_ORDEN_CLI[ordenClientes.campo];
   var dirMultCli = ordenClientes.dir === "desc" ? -1 : 1;
-  clientesData.sort(function(a,b){
-    if (campoOrdenCli === "cliente") return dirMultCli * a.cliente.localeCompare(b.cliente);
-    // Sin frecuencia (una sola compra) va siempre al final, sin importar el orden.
-    var av = a[campoOrdenCli], bv = b[campoOrdenCli];
-    if (av === null && bv === null) return 0;
-    if (av === null) return 1;
-    if (bv === null) return -1;
-    return dirMultCli * (av - bv);
-  });
+  function ordenarClientes(lista) {
+    lista.sort(function(a,b){
+      if (campoOrdenCli === "cliente") return dirMultCli * a.cliente.localeCompare(b.cliente);
+      // Sin frecuencia (una sola compra) va siempre al final, sin importar el orden.
+      var av = a[campoOrdenCli], bv = b[campoOrdenCli];
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return dirMultCli * (av - bv);
+    });
+    return lista;
+  }
   function thOrdenableCli(campo, label, alinDer) {
     var activo = ordenClientes.campo === campo;
     var flecha = activo ? (ordenClientes.dir === "desc" ? " ▼" : " ▲") : "";
     // Sin table-layout:fixed a propósito: así el ancho de cada columna se
     // ajusta a su contenido — los números (nowrap, ver CSS) nunca se
-    // parten, y el texto (CLIENTE) es el único que cede espacio envolviendo
-    // en varias líneas si hace falta.
+    // parten, y el texto (CLIENTE/CASA) es el único que cede espacio
+    // envolviendo en varias líneas si hace falta.
     return '<th class="th-ordenable-cli" data-campo-orden-cli="'+campo+'" style="white-space:nowrap;cursor:pointer;'+(alinDer?'text-align:right':'')+(activo?';color:#a8e6a3':'')+'">'+label+flecha+'</th>';
   }
-  html += '<div class="kpi-block"><div class="kpi-block-title">UTILIDAD Y FRECUENCIA POR CLIENTE</div>';
-  html += '<div style="overflow-x:auto"><table class="cliente-table" style="font-size:12px"><thead><tr>'+
-    thOrdenableCli("cliente","CLIENTE",false)+
-    thOrdenableCli("ventas","VENTAS",true)+
-    thOrdenableCli("utilidad","UTILIDAD",true)+
-    thOrdenableCli("pct","%",true)+
-    thOrdenableCli("compras","COMPRAS",true)+
-    thOrdenableCli("frecuencia","CADA X DÍAS",true)+
-  '</tr></thead><tbody>';
+  var porUbicCliente = {};
   clientesData.forEach(function(c){
-    var colorUtil = c.utilidad < 0 ? "#ff7070" : "#a8e6a3";
-    html += '<tr class="cliente-row" style="cursor:default">'+
-      '<td>'+c.cliente+'</td>'+
-      '<td style="text-align:right">$'+fmtMoney(c.ventas)+'</td>'+
-      '<td style="text-align:right;color:'+colorUtil+'">$'+fmtMoney(c.utilidad)+'</td>'+
-      '<td style="text-align:right;color:'+colorUtil+'">'+c.pct.toFixed(0)+'%</td>'+
-      '<td style="text-align:right">'+c.numCompras+'</td>'+
-      '<td style="text-align:right">'+(c.frecuenciaDias===null ? "—" : Math.round(c.frecuenciaDias)+"d")+'</td>'+
-    '</tr>';
+    if (!porUbicCliente[c.ubicacion]) porUbicCliente[c.ubicacion] = [];
+    porUbicCliente[c.ubicacion].push(c);
   });
-  html += '</tbody></table></div></div>';
+  var ubicsClientes = Object.keys(porUbicCliente).sort(function(a,b){
+    var totalA = porUbicCliente[a].reduce(function(s,c){ return s+c.ventas; }, 0);
+    var totalB = porUbicCliente[b].reduce(function(s,c){ return s+c.ventas; }, 0);
+    return totalB - totalA;
+  });
+  ubicsClientes.forEach(function(ubic){
+    var lista = ordenarClientes(porUbicCliente[ubic]);
+    html += '<div class="kpi-block"><div class="kpi-block-title">UTILIDAD Y FRECUENCIA POR CLIENTE — '+ubic.toUpperCase()+'</div>';
+    html += '<div style="overflow-x:auto"><table class="cliente-table" style="font-size:12px"><thead><tr>'+
+      thOrdenableCli("cliente","CLIENTE",false)+
+      '<th style="white-space:nowrap">CASA</th>'+
+      thOrdenableCli("ventas","VENTAS",true)+
+      thOrdenableCli("utilidad","UTILIDAD",true)+
+      thOrdenableCli("pct","%",true)+
+      thOrdenableCli("compras","COMPRAS",true)+
+      thOrdenableCli("frecuencia","CADA X DÍAS",true)+
+    '</tr></thead><tbody>';
+    lista.forEach(function(c){
+      var colorUtil = c.utilidad < 0 ? "#ff7070" : "#a8e6a3";
+      html += '<tr class="cliente-row" style="cursor:default">'+
+        '<td>'+c.cliente+'</td>'+
+        '<td style="color:#5a8a5a">'+(c.casa||"—")+'</td>'+
+        '<td style="text-align:right">$'+fmtMoney(c.ventas)+'</td>'+
+        '<td style="text-align:right;color:'+colorUtil+'">$'+fmtMoney(c.utilidad)+'</td>'+
+        '<td style="text-align:right;color:'+colorUtil+'">'+c.pct.toFixed(0)+'%</td>'+
+        '<td style="text-align:right">'+c.numCompras+'</td>'+
+        '<td style="text-align:right">'+(c.frecuenciaDias===null ? "—" : Math.round(c.frecuenciaDias)+"d")+'</td>'+
+      '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+  });
 
   // ── Detalle de ventas por producto (fruta · nombre comercial · presentación) ──
   // Agrupado por fruta (colapsado por default). El costo de cada línea ya

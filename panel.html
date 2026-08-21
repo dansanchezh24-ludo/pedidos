@@ -126,16 +126,22 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 <div class="header">
   <div style="font-size:36px;margin-bottom:4px">🫐</div>
   <h1>Panel</h1>
-  <p>TABLERO · RESUMEN · PROVEEDOR</p>
+  <p>CATÁLOGO · TABLERO · RESUMEN · PROVEEDOR</p>
 </div>
 
 <div class="tabs">
+  <button class="tab" id="tabCatalogo">📦 Catálogo</button>
   <button class="tab active" id="tabTablero">📈 Tablero</button>
   <button class="tab" id="tabResumen">📊 Resumen</button>
   <button class="tab" id="tabProveedor">🛒 Proveedor</button>
 </div>
 
 <div class="content">
+  <!-- ══ CATÁLOGO (compra vs venta) ══ -->
+  <div id="catalogo" class="view">
+    <div id="catalogoContent"></div>
+  </div>
+
   <!-- ══ TABLERO (KPIs) ══ -->
   <div id="tablero" class="view active">
     <div class="fecha-filter">
@@ -211,7 +217,10 @@ var ordenDetalleVentas = "utilidadDesc"; // "alfabetico" | "ventaDesc" | "ventaA
 var vistaGlobal = "clientes"; // "clientes" | "familia" — filtra TODO el Tablero (todos los reportes) a ventas a precio normal o a precio familiar/costo, según la columna "Tipo" del Sheet (ver filtrarPorVistaGlobal)
 var ordenProductosActuales = { campo:null, dir:"desc" }; // click en un encabezado de "PRODUCTOS ACTUALES — COMPRA VS VENTA" para ordenar por esa columna
 var ordenClientes = { campo:"utilidad", dir:"desc" }; // click en un encabezado de "UTILIDAD Y FRECUENCIA POR CLIENTE" para ordenar por esa columna
+var ubicVentasCasaActiva = null; // pestaña activa (Azaleas/General/El Sereno) en "VENTAS POR CASA" — null = la de mayor venta
+var ubicClientesActiva = null; // pestaña activa en "UTILIDAD Y FRECUENCIA POR CLIENTE" — null = la de mayor venta
 
+document.getElementById("tabCatalogo").addEventListener("click", function(){ switchTab("catalogo"); });
 document.getElementById("tabTablero").addEventListener("click",  function(){ switchTab("tablero"); });
 document.getElementById("tabResumen").addEventListener("click",  function(){ switchTab("resumen"); });
 document.getElementById("tabProveedor").addEventListener("click", function(){ switchTab("proveedor"); });
@@ -241,6 +250,7 @@ function switchTab(tab) {
   document.querySelectorAll(".view").forEach(function(v){ v.classList.remove("active"); });
   document.getElementById("tab"+tab.charAt(0).toUpperCase()+tab.slice(1)).classList.add("active");
   document.getElementById(tab).classList.add("active");
+  if (tab==="catalogo")  renderCatalogo();
   if (tab==="tablero")   cargarTablero();
   if (tab==="resumen")   cargarResumen();
   if (tab==="proveedor") cargarProveedor();
@@ -958,22 +968,28 @@ function renderTablero() {
     html += '</div>';
   }
 
-  // ── Ventas por casa, dividido por ubicación — top 5 con opción de desplegar ──
+  // ── Ventas por casa, dividido por ubicación — una pestaña por ubicación en
+  // vez de apilar los 3 bloques (para no alargar tanto la página) — top 5
+  // con opción de desplegar dentro de la ubicación activa. ──
   var casasPorUbic = calcularVentasPorCasa(datos);
-  var ubicsConCasas = Object.keys(casasPorUbic).sort(function(a,b){
+  var ubicsConCasas = Object.keys(casasPorUbic).filter(function(u){ return casasPorUbic[u].length > 0; }).sort(function(a,b){
     var totalA = casasPorUbic[a].reduce(function(s,c){ return s+c[1]; }, 0);
     var totalB = casasPorUbic[b].reduce(function(s,c){ return s+c[1]; }, 0);
     return totalB - totalA;
   });
-  ubicsConCasas.forEach(function(ubic){
-    var casas = casasPorUbic[ubic];
-    if (!casas.length) return;
+  if (ubicsConCasas.length) {
+    if (!ubicVentasCasaActiva || ubicsConCasas.indexOf(ubicVentasCasaActiva) === -1) ubicVentasCasaActiva = ubicsConCasas[0];
+    var ubicCasaSel = ubicVentasCasaActiva;
+    var casas = casasPorUbic[ubicCasaSel];
     var maxCasa = Math.max.apply(null, casas.map(function(c){ return c[1]; }));
-    var expandido = !!casasExpandido[ubic];
+    var expandido = !!casasExpandido[ubicCasaSel];
     var casasAMostrar = expandido ? casas : casas.slice(0, 5);
-    html += '<div class="kpi-block"><div class="kpi-block-title" style="display:flex;justify-content:space-between;align-items:center">'+
-      '<span>VENTAS POR CASA — '+ubic.toUpperCase()+'</span>'+
-      (casas.length > 5 ? '<button class="periodo-btn casas-toggle-btn" data-ubic="'+ubic.replace(/"/g,"&quot;")+'">'+(expandido ? 'Ver menos' : 'Ver todas ('+casas.length+')')+'</button>' : '')+
+    html += '<div class="kpi-block"><div class="kpi-block-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+      '<span>VENTAS POR CASA</span>'+
+      (casas.length > 5 ? '<button class="periodo-btn casas-toggle-btn" data-ubic="'+ubicCasaSel.replace(/"/g,"&quot;")+'">'+(expandido ? 'Ver menos' : 'Ver todas ('+casas.length+')')+'</button>' : '')+
+    '</div>';
+    html += '<div class="periodo-toggle" style="margin-bottom:12px">'+
+      ubicsConCasas.map(function(u){ return '<button class="periodo-btn ubic-casa-btn'+(u===ubicCasaSel?" active":"")+'" data-ubic-casa="'+u.replace(/"/g,"&quot;")+'">'+u+'</button>'; }).join('')+
     '</div>';
     casasAMostrar.forEach(function(c){
       var pct = maxCasa>0 ? Math.round(c[1]/maxCasa*100) : 0;
@@ -984,7 +1000,7 @@ function renderTablero() {
       '</div>';
     });
     html += '</div>';
-  });
+  }
 
   // ── Utilidad y frecuencia de compra por cliente (ver calcularUtilidadPorCliente) ──
   // Separado por ubicación (Azaleas/El Sereno/General), igual que "VENTAS
@@ -1025,9 +1041,14 @@ function renderTablero() {
     var totalB = porUbicCliente[b].reduce(function(s,c){ return s+c.ventas; }, 0);
     return totalB - totalA;
   });
-  ubicsClientes.forEach(function(ubic){
-    var lista = ordenarClientes(porUbicCliente[ubic]);
-    html += '<div class="kpi-block"><div class="kpi-block-title">UTILIDAD Y FRECUENCIA POR CLIENTE — '+ubic.toUpperCase()+'</div>';
+  if (ubicsClientes.length) {
+    if (!ubicClientesActiva || ubicsClientes.indexOf(ubicClientesActiva) === -1) ubicClientesActiva = ubicsClientes[0];
+    var ubicCliSel = ubicClientesActiva;
+    var lista = ordenarClientes(porUbicCliente[ubicCliSel]);
+    html += '<div class="kpi-block"><div class="kpi-block-title">UTILIDAD Y FRECUENCIA POR CLIENTE</div>';
+    html += '<div class="periodo-toggle" style="margin:8px 0 12px">'+
+      ubicsClientes.map(function(u){ return '<button class="periodo-btn ubic-cliente-btn'+(u===ubicCliSel?" active":"")+'" data-ubic-cliente="'+u.replace(/"/g,"&quot;")+'">'+u+'</button>'; }).join('')+
+    '</div>';
     html += '<div style="overflow-x:auto"><table class="cliente-table" style="font-size:12px"><thead><tr>'+
       thOrdenableCli("cliente","CLIENTE",false)+
       '<th style="white-space:nowrap">CASA</th>'+
@@ -1050,7 +1071,7 @@ function renderTablero() {
       '</tr>';
     });
     html += '</tbody></table></div></div>';
-  });
+  }
 
   // ── Detalle de ventas por producto (fruta · nombre comercial · presentación) ──
   // Agrupado por fruta (colapsado por default). El costo de cada línea ya
@@ -1335,128 +1356,6 @@ function renderTablero() {
     html += '</tbody></table></div></div>';
   }
 
-  // ── Precio de compra vs venta — solo lo que hoy es seleccionable en
-  // index.html (getCatalogoDisponible: ACTIVOS + IDS de precio familiar +
-  // MERCADO). CATALOGO trae productos viejos que ya no se pueden pedir
-  // (Familiar/Individual Nx, Elote Blanco packs, Ludo Duo/Elotiza/Fiesta/
-  // Parrillada) pero se dejan ahí para seguir costeando pedidos históricos
-  // en Sheets — esos no cuentan como "visibles en pedidos" y se excluyen
-  // aquí. Si agregas/quitas algo de ACTIVOS o IDS en index.html, actualiza
-  // esta lista también.
-  var PEDIBLES_IDS = [
-    "ludo_select","ludo_pack","ludo_mix","ludo_berry_max","fresa","cherry_rojo","cherry_amarillo",
-    "tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo","zarzamora","frambuesa","blueberry",
-    "limon_persa","tuna","maracuya","rambutan","ciruela_roja","jamaica","coco_cafe","pitahaya","cereza",
-    "higo","elote_blanco","huevo_12","huevo_18","chile_arbol_250","ajo_pelado","concentrado_pulpas"
-  ];
-  // Los paquetes de berries (Select/3-Pack/Mix/Max) NO tienen un costo fijo:
-  // el campo CATALOGO.costo de estos 4 quedó desactualizado/plano y no refleja
-  // la fórmula real. El costo real siempre se arma con el costo de bote
-  // VIGENTE de cada fruta (ver HIST_COSTO_PROVEEDOR) entre 3 (1 bote = 3
-  // clamshells), igual que ya calcula el reporte de ventas:
-  //   Select / 3-Pack: 1 fruta elegida — varía según cuál (bote de esa fruta
-  //     ÷3 por clamshell; el 3-Pack usa las 3 clamshells de la misma fruta,
-  //     así que su costo total = 1 bote completo de esa fruta).
-  //   Mix: 1 clamshell de cada una de las 3 frutas base — suma de los 3
-  //     botes vigentes ÷ 3.
-  //   Max: Mix + 1 clamshell de Fresa (costo por clamshell individual, sin
-  //     dividir entre bote).
-  function costoBoteVigente(fruta) {
-    var h = HIST_COSTO_PROVEEDOR[fruta];
-    return h && h.length ? h[h.length-1].costo : 0;
-  }
-  function costoClamshellVigente(fruta) {
-    var h = HIST_COSTO_PROVEEDOR_CLAMSHELL[fruta];
-    return h && h.length ? h[h.length-1].costo : 0;
-  }
-  var botesVigentes = FRUTAS.map(costoBoteVigente); // [Zarzamora, Frambuesa, Blueberry]
-  var costoMixVigente = botesVigentes.reduce(function(s,c){ return s+c/CAJAS_POR_BOTE; }, 0);
-  var costoMaxVigente = costoMixVigente + costoClamshellVigente("Fresa");
-  // Select y 3-Pack se desglosan por fruta (una fila por Zarzamora/Frambuesa/
-  // Blueberry) en vez de mostrar un rango — ver COSTOS_POR_FRUTA_IDS abajo.
-  var COSTO_FORMULA_IDS = {
-    ludo_mix:    '$'+fmtMoney(costoMixVigente)+' (Zarzamora+Frambuesa+Blueberry ÷3)',
-    ludo_berry_max: '$'+fmtMoney(costoMaxVigente)+' (Mix + Fresa)'
-  };
-  // Costo numérico de los 2 paquetes de arriba — para calcular su utilidad,
-  // ya que COSTO_FORMULA_IDS solo trae el texto formateado.
-  var COSTO_NUM_IDS = {
-    ludo_mix:    costoMixVigente,
-    ludo_berry_max: costoMaxVigente
-  };
-  // Select (costo por clamshell = bote de esa fruta ÷3) y 3-Pack (costo por
-  // 3-Pack = 1 bote completo de esa fruta, ya que son 3 clamshells de la
-  // misma) desglosados por cada una de las 3 frutas base.
-  var COSTOS_POR_FRUTA_IDS = {
-    ludo_select: FRUTAS.map(function(fr){ return { fruta:fr, costo: costoBoteVigente(fr)/CAJAS_POR_BOTE }; }),
-    ludo_pack:   FRUTAS.map(function(fr){ return { fruta:fr, costo: costoBoteVigente(fr) }; })
-  };
-  // $ utilidad y % utilidad de una fila.
-  function filaUtilidad(precio, costo) {
-    var util = precio - costo;
-    var pct = precio > 0 ? (util/precio*100) : 0;
-    return { costoTexto: '$'+fmtMoney(costo), costoValor:costo, texto: '$'+fmtMoney(util), utilValor:util, pctTexto: pct.toFixed(0)+'%', pctValor:pct, neg: util<0 };
-  }
-
-  var filasProductosActuales = [];
-  CATALOGO.filter(function(cat){ return PEDIBLES_IDS.indexOf(cat.id) !== -1; }).forEach(function(cat){
-    var unidadSuf = cat.unidad === "kg" ? "/kg" : "";
-    if (COSTOS_POR_FRUTA_IDS[cat.id]) {
-      COSTOS_POR_FRUTA_IDS[cat.id].forEach(function(cf){
-        var u = filaUtilidad(cat.precio, cf.costo);
-        filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre+' — '+cf.fruta, nombreOrden:cat.nombre+' '+cf.fruta, costoTexto:u.costoTexto, costoValor:u.costoValor, precioTexto:'$'+fmtMoney(cat.precio), precioValor:cat.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
-      });
-    } else if (COSTO_FORMULA_IDS[cat.id]) {
-      var u = filaUtilidad(cat.precio, COSTO_NUM_IDS[cat.id]);
-      filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre, nombreOrden:cat.nombre, costoTexto:COSTO_FORMULA_IDS[cat.id], costoValor:u.costoValor, precioTexto:'$'+fmtMoney(cat.precio), precioValor:cat.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
-    } else if (cat.presets && cat.presets.length) {
-      cat.presets.forEach(function(pr){
-        var u = filaUtilidad(pr.precio, pr.costo);
-        filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre+' ('+pr.label+')', nombreOrden:cat.nombre+' '+pr.label, costoTexto:u.costoTexto, costoValor:u.costoValor, precioTexto:'$'+fmtMoney(pr.precio), precioValor:pr.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
-      });
-    } else {
-      var u = filaUtilidad(cat.precio, cat.costo);
-      filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre, nombreOrden:cat.nombre, costoTexto:'$'+fmtMoney(cat.costo)+unidadSuf, costoValor:u.costoValor, precioTexto:'$'+fmtMoney(cat.precio)+unidadSuf, precioValor:cat.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
-    }
-  });
-  var CAMPOS_ORDEN_PA = { producto:"nombreOrden", compra:"costoValor", venta:"precioValor", util:"utilValor", pct:"pctValor" };
-  if (ordenProductosActuales.campo) {
-    var campoOrden = CAMPOS_ORDEN_PA[ordenProductosActuales.campo];
-    var dirMult = ordenProductosActuales.dir === "desc" ? -1 : 1;
-    filasProductosActuales.sort(function(a,b){
-      if (campoOrden === "nombreOrden") return dirMult * a.nombreOrden.localeCompare(b.nombreOrden);
-      return dirMult * (a[campoOrden] - b[campoOrden]);
-    });
-  }
-  function thOrdenable(campo, label, alinDer) {
-    var activo = ordenProductosActuales.campo === campo;
-    var flecha = activo ? (ordenProductosActuales.dir === "desc" ? " ▼" : " ▲") : "";
-    // Sin table-layout:fixed a propósito: así el ancho de cada columna se
-    // ajusta a su contenido — los números (nowrap, ver CSS) nunca se
-    // parten, y el texto (PRODUCTO) es el único que cede espacio envolviendo
-    // en varias líneas si hace falta.
-    return '<th class="th-ordenable" data-campo-orden="'+campo+'" style="white-space:nowrap;cursor:pointer;'+(alinDer?'text-align:right':'')+(activo?';color:#a8e6a3':'')+'">'+label+flecha+'</th>';
-  }
-
-  html += '<div class="kpi-block"><div class="kpi-block-title">PRODUCTOS ACTUALES — COMPRA VS VENTA</div>';
-  html += '<div style="overflow-x:auto"><table class="cliente-table" style="font-size:12px"><thead><tr>'+
-    thOrdenable("producto","PRODUCTO",false)+
-    thOrdenable("compra","COMPRA",true)+
-    thOrdenable("venta","VENTA",true)+
-    thOrdenable("util","$ UTIL.",true)+
-    thOrdenable("pct","% UTIL.",true)+
-  '</tr></thead><tbody>';
-  filasProductosActuales.forEach(function(f){
-    var colorUtil = f.neg ? '#ff7070' : '#a8e6a3';
-    html += '<tr class="cliente-row" style="cursor:default">'+
-      '<td>'+f.nombre+'</td>'+
-      '<td style="text-align:right;color:#ffb74d">'+f.costoTexto+'</td>'+
-      '<td style="text-align:right;color:#a8e6a3">'+f.precioTexto+'</td>'+
-      '<td style="text-align:right;color:'+colorUtil+'">'+f.utilTexto+'</td>'+
-      '<td style="text-align:right;color:'+colorUtil+'">'+f.pctTexto+'</td>'+
-    '</tr>';
-  });
-  html += '</tbody></table></div></div>';
 
   container.innerHTML = html;
   container.querySelectorAll(".periodo-btn").forEach(function(btn){
@@ -1473,17 +1372,15 @@ function renderTablero() {
       renderTablero();
     });
   });
-  container.querySelectorAll(".th-ordenable").forEach(function(th){
-    th.addEventListener("click", function(){
-      var campo = this.dataset.campoOrden;
-      if (ordenProductosActuales.campo === campo) {
-        ordenProductosActuales.dir = ordenProductosActuales.dir === "desc" ? "asc" : "desc";
-      } else {
-        // Producto arranca A-Z (ascendente); las columnas numéricas arrancan
-        // de mayor a menor, que es lo más útil para ver primero.
-        ordenProductosActuales.campo = campo;
-        ordenProductosActuales.dir = campo === "producto" ? "asc" : "desc";
-      }
+  container.querySelectorAll(".ubic-casa-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      ubicVentasCasaActiva = this.dataset.ubicCasa;
+      renderTablero();
+    });
+  });
+  container.querySelectorAll(".ubic-cliente-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      ubicClientesActiva = this.dataset.ubicCliente;
       renderTablero();
     });
   });
@@ -1641,6 +1538,152 @@ async function cargarResumen() {
   } catch(e) {
     document.getElementById("resumenCards").innerHTML="<p style='color:#ff8a80;text-align:center;padding:20px'>"+e.message+"</p>";
   }
+}
+
+// ═══════════════════════════════════════════
+// CATÁLOGO — precio de compra vs venta de cada producto vigente
+// ═══════════════════════════════════════════
+// Solo lo que hoy es seleccionable en index.html (getCatalogoDisponible:
+// ACTIVOS + IDS de precio familiar + MERCADO). CATALOGO trae productos
+// viejos que ya no se pueden pedir (Familiar/Individual Nx, Elote Blanco
+// packs, Ludo Duo/Elotiza/Fiesta/Parrillada) pero se dejan ahí para seguir
+// costeando pedidos históricos en Sheets — esos no cuentan como "visibles
+// en pedidos" y se excluyen aquí. Si agregas/quitas algo de ACTIVOS o IDS
+// en index.html, actualiza esta lista también. No depende de datos del
+// Sheet (solo de CATALOGO/HIST_COSTO_* de config.js), así que se puede
+// renderizar directo sin fetch.
+var PEDIBLES_IDS = [
+  "ludo_select","ludo_pack","ludo_mix","ludo_berry_max","fresa","cherry_rojo","cherry_amarillo",
+  "tomate_kumato","ludo_tomatizado","ludo_fresh","elote_antojo","zarzamora","frambuesa","blueberry",
+  "limon_persa","tuna","maracuya","rambutan","ciruela_roja","jamaica","coco_cafe","pitahaya","cereza",
+  "higo","elote_blanco","huevo_12","huevo_18","chile_arbol_250","ajo_pelado","concentrado_pulpas"
+];
+function renderCatalogo() {
+  var container = document.getElementById("catalogoContent");
+  // Los paquetes de berries (Select/3-Pack/Mix/Max) NO tienen un costo fijo:
+  // el campo CATALOGO.costo de estos 4 quedó desactualizado/plano y no refleja
+  // la fórmula real. El costo real siempre se arma con el costo de bote
+  // VIGENTE de cada fruta (ver HIST_COSTO_PROVEEDOR) entre 3 (1 bote = 3
+  // clamshells), igual que ya calcula el reporte de ventas:
+  //   Select / 3-Pack: 1 fruta elegida — varía según cuál (bote de esa fruta
+  //     ÷3 por clamshell; el 3-Pack usa las 3 clamshells de la misma fruta,
+  //     así que su costo total = 1 bote completo de esa fruta).
+  //   Mix: 1 clamshell de cada una de las 3 frutas base — suma de los 3
+  //     botes vigentes ÷ 3.
+  //   Max: Mix + 1 clamshell de Fresa (costo por clamshell individual, sin
+  //     dividir entre bote).
+  function costoBoteVigente(fruta) {
+    var h = HIST_COSTO_PROVEEDOR[fruta];
+    return h && h.length ? h[h.length-1].costo : 0;
+  }
+  function costoClamshellVigente(fruta) {
+    var h = HIST_COSTO_PROVEEDOR_CLAMSHELL[fruta];
+    return h && h.length ? h[h.length-1].costo : 0;
+  }
+  var botesVigentes = FRUTAS.map(costoBoteVigente); // [Zarzamora, Frambuesa, Blueberry]
+  var costoMixVigente = botesVigentes.reduce(function(s,c){ return s+c/CAJAS_POR_BOTE; }, 0);
+  var costoMaxVigente = costoMixVigente + costoClamshellVigente("Fresa");
+  // Select y 3-Pack se desglosan por fruta (una fila por Zarzamora/Frambuesa/
+  // Blueberry) en vez de mostrar un rango — ver COSTOS_POR_FRUTA_IDS abajo.
+  var COSTO_FORMULA_IDS = {
+    ludo_mix:    '$'+fmtMoney(costoMixVigente),
+    ludo_berry_max: '$'+fmtMoney(costoMaxVigente)
+  };
+  // Costo numérico de los 2 paquetes de arriba — para calcular su utilidad,
+  // ya que COSTO_FORMULA_IDS solo trae el texto formateado.
+  var COSTO_NUM_IDS = {
+    ludo_mix:    costoMixVigente,
+    ludo_berry_max: costoMaxVigente
+  };
+  // Select (costo por clamshell = bote de esa fruta ÷3) y 3-Pack (costo por
+  // 3-Pack = 1 bote completo de esa fruta, ya que son 3 clamshells de la
+  // misma) desglosados por cada una de las 3 frutas base.
+  var COSTOS_POR_FRUTA_IDS = {
+    ludo_select: FRUTAS.map(function(fr){ return { fruta:fr, costo: costoBoteVigente(fr)/CAJAS_POR_BOTE }; }),
+    ludo_pack:   FRUTAS.map(function(fr){ return { fruta:fr, costo: costoBoteVigente(fr) }; })
+  };
+  // $ utilidad y % utilidad de una fila.
+  function filaUtilidad(precio, costo) {
+    var util = precio - costo;
+    var pct = precio > 0 ? (util/precio*100) : 0;
+    return { costoTexto: '$'+fmtMoney(costo), costoValor:costo, texto: '$'+fmtMoney(util), utilValor:util, pctTexto: pct.toFixed(0)+'%', pctValor:pct, neg: util<0 };
+  }
+
+  var filasProductosActuales = [];
+  CATALOGO.filter(function(cat){ return PEDIBLES_IDS.indexOf(cat.id) !== -1; }).forEach(function(cat){
+    var unidadSuf = cat.unidad === "kg" ? "/kg" : "";
+    if (COSTOS_POR_FRUTA_IDS[cat.id]) {
+      COSTOS_POR_FRUTA_IDS[cat.id].forEach(function(cf){
+        var u = filaUtilidad(cat.precio, cf.costo);
+        filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre+' — '+cf.fruta, nombreOrden:cat.nombre+' '+cf.fruta, costoTexto:u.costoTexto, costoValor:u.costoValor, precioTexto:'$'+fmtMoney(cat.precio), precioValor:cat.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
+      });
+    } else if (COSTO_FORMULA_IDS[cat.id]) {
+      var u = filaUtilidad(cat.precio, COSTO_NUM_IDS[cat.id]);
+      filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre, nombreOrden:cat.nombre, costoTexto:COSTO_FORMULA_IDS[cat.id], costoValor:u.costoValor, precioTexto:'$'+fmtMoney(cat.precio), precioValor:cat.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
+    } else if (cat.presets && cat.presets.length) {
+      cat.presets.forEach(function(pr){
+        var u = filaUtilidad(pr.precio, pr.costo);
+        filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre+' ('+pr.label+')', nombreOrden:cat.nombre+' '+pr.label, costoTexto:u.costoTexto, costoValor:u.costoValor, precioTexto:'$'+fmtMoney(pr.precio), precioValor:pr.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
+      });
+    } else {
+      var u = filaUtilidad(cat.precio, cat.costo);
+      filasProductosActuales.push({ nombre:(cat.emoji||"")+' '+cat.nombre, nombreOrden:cat.nombre, costoTexto:'$'+fmtMoney(cat.costo)+unidadSuf, costoValor:u.costoValor, precioTexto:'$'+fmtMoney(cat.precio)+unidadSuf, precioValor:cat.precio, utilTexto:u.texto, utilValor:u.utilValor, pctTexto:u.pctTexto, pctValor:u.pctValor, neg:u.neg });
+    }
+  });
+  var CAMPOS_ORDEN_PA = { producto:"nombreOrden", compra:"costoValor", venta:"precioValor", util:"utilValor", pct:"pctValor" };
+  if (ordenProductosActuales.campo) {
+    var campoOrden = CAMPOS_ORDEN_PA[ordenProductosActuales.campo];
+    var dirMult = ordenProductosActuales.dir === "desc" ? -1 : 1;
+    filasProductosActuales.sort(function(a,b){
+      if (campoOrden === "nombreOrden") return dirMult * a.nombreOrden.localeCompare(b.nombreOrden);
+      return dirMult * (a[campoOrden] - b[campoOrden]);
+    });
+  }
+  function thOrdenable(campo, label, alinDer) {
+    var activo = ordenProductosActuales.campo === campo;
+    var flecha = activo ? (ordenProductosActuales.dir === "desc" ? " ▼" : " ▲") : "";
+    // Sin table-layout:fixed a propósito: así el ancho de cada columna se
+    // ajusta a su contenido — los números (nowrap, ver CSS) nunca se
+    // parten, y el texto (PRODUCTO) es el único que cede espacio envolviendo
+    // en varias líneas si hace falta.
+    return '<th class="th-ordenable" data-campo-orden="'+campo+'" style="white-space:nowrap;cursor:pointer;'+(alinDer?'text-align:right':'')+(activo?';color:#a8e6a3':'')+'">'+label+flecha+'</th>';
+  }
+
+  var html = '<div class="kpi-block"><div class="kpi-block-title">PRODUCTOS ACTUALES — COMPRA VS VENTA</div>';
+  html += '<div style="overflow-x:auto"><table class="cliente-table" style="font-size:12px"><thead><tr>'+
+    thOrdenable("producto","PRODUCTO",false)+
+    thOrdenable("compra","COMPRA",true)+
+    thOrdenable("venta","VENTA",true)+
+    thOrdenable("util","$ UTIL.",true)+
+    thOrdenable("pct","% UTIL.",true)+
+  '</tr></thead><tbody>';
+  filasProductosActuales.forEach(function(f){
+    var colorUtil = f.neg ? '#ff7070' : '#a8e6a3';
+    html += '<tr class="cliente-row" style="cursor:default">'+
+      '<td>'+f.nombre+'</td>'+
+      '<td style="text-align:right;color:#ffb74d">'+f.costoTexto+'</td>'+
+      '<td style="text-align:right;color:#a8e6a3">'+f.precioTexto+'</td>'+
+      '<td style="text-align:right;color:'+colorUtil+'">'+f.utilTexto+'</td>'+
+      '<td style="text-align:right;color:'+colorUtil+'">'+f.pctTexto+'</td>'+
+    '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+
+  container.innerHTML = html;
+  container.querySelectorAll(".th-ordenable").forEach(function(th){
+    th.addEventListener("click", function(){
+      var campo = this.dataset.campoOrden;
+      if (ordenProductosActuales.campo === campo) {
+        ordenProductosActuales.dir = ordenProductosActuales.dir === "desc" ? "asc" : "desc";
+      } else {
+        // Producto arranca A-Z (ascendente); las columnas numéricas arrancan
+        // de mayor a menor, que es lo más útil para ver primero.
+        ordenProductosActuales.campo = campo;
+        ordenProductosActuales.dir = campo === "producto" ? "asc" : "desc";
+      }
+      renderCatalogo();
+    });
+  });
 }
 
 function renderResumen() {

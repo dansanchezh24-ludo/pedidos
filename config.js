@@ -65,7 +65,7 @@ var CATALOGO = [
   { id:"elote_blanco_4",   nombre:"Elote Blanco 4-Pack",           precio:215, costo:130, slots:0, emoji:"🌽", elotes:4 },
   { id:"elote_blanco_5",   nombre:"Elote Blanco 5-Pack",           precio:265, costo:160, slots:0, emoji:"🌽", elotes:5 },
   { id:"elote_blanco_duo", nombre:"Elote Blanco Duo",              precio:115, costo:70,  slots:0, emoji:"🌽", elotes:2 },
-  { id:"elote_antojo",     nombre:"Elote Select",                  precio:100, costo:60,  slots:0, emoji:"🌽", elotes:3 },
+  { id:"elote_antojo",     nombre:"Elote Amarillo",                precio:100, costo:60,  slots:0, emoji:"🌽", elotes:3 },
   { id:"fam_1",            nombre:"Familiar (bote) 1x",            precio:120, costo:50,  slots:1, emoji:"🪣" },
   { id:"fam_2",            nombre:"Familiar (bote) 2x",            precio:220, costo:100, slots:2, emoji:"🪣" },
   { id:"fam_3",            nombre:"Familiar (bote) 3x",            precio:320, costo:150, slots:3, emoji:"🪣" },
@@ -166,7 +166,7 @@ var HIST_COSTO_PULPA = {
 var HIST_COSTO_ELOTE = {
   "Elote amarillo": [ {desde:"2000-01-01", costo:50} ],
   "Elote blanco":   [ {desde:"2000-01-01", costo:30} ],
-  "Elote Select":    [ {desde:"2026-06-09", costo:50}, {desde:"2026-07-08", costo:60} ],
+  "Elote Amarillo":  [ {desde:"2026-06-09", costo:50}, {desde:"2026-07-08", costo:60} ],
   "Ludo Duo":        [ {desde:"2026-06-09", costo:100} ],
   "Ludo Elotiza":    [ {desde:"2026-06-09", costo:150} ],
   "Ludo Parrillada": [ {desde:"2026-06-09", costo:200} ],
@@ -192,13 +192,14 @@ function normalizarFruta(nombre) {
 }
 
 // Nombres viejos de productos (no frutas) que cambiaron de nombre pero siguen
-// costeándose igual — ej. "Ludo Antojo" es el nombre viejo de "Elote Select".
+// costeándose igual — ej. "Ludo Antojo" es el nombre viejo de "Elote Amarillo".
 // Los "Ludo X" -> "Ludo Berry X" son el mismo rebranding de nombres que sufrieron
 // los paquetes de berries (ver CATALOGO): pedidos viejos en Sheets todavía traen
 // el nombre corto y sin esto se ven como un producto aparte del actual.
 var ALIAS_PRODUCTOS = {
-  "Ludo Antojo": "Elote Select",
-  "Elote amarillo": "Elote Select",
+  "Ludo Antojo": "Elote Amarillo",
+  "Elote amarillo": "Elote Amarillo",
+  "Elote Select": "Elote Amarillo",
   "Ludo Select": "Ludo Berry Select",
   "Ludo Pack": "Ludo Berry 3-Pack",
   "Ludo Mix": "Ludo Berry Mix",
@@ -214,7 +215,7 @@ function normalizarProducto(nombre) {
 var ELOTE_FRUTA = {
   "Elote amarillo":  "Elote amarillo",
   "Elote blanco":    "Elote blanco",
-  "Elote Select":    "Elote amarillo",
+  "Elote Amarillo":  "Elote amarillo",
   "Ludo Duo":        "Elote amarillo",
   "Ludo Elotiza":    "Elote amarillo",
   "Ludo Parrillada": "Elote amarillo",

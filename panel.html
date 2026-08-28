@@ -1911,6 +1911,7 @@ function parsearProducto(nombreRaw, cantidad) {
   var frutas = [];
   var mult = 1; // cajas (clamshells) representadas por cada unidad pedida
   var kgEquivalente = 0;
+  var bolsaLabel = null; // "250 g"/"500 g"/"1 kg" si el producto usa presets de bolsa fija (ej. Jamaica)
 
   if (nombreRaw.indexOf("Ludo Berry Max") !== -1) {
     // Ludo Berry Max = Fresa + Ludo Berry Mix: 1 clamshell de Fresa (implícito, no es slot)
@@ -1970,12 +1971,16 @@ function parsearProducto(nombreRaw, cantidad) {
     frutas = [suf.base];
     var catRef = CATALOGO.find(function(c){ return c.nombre === suf.base; });
     kgEquivalente = catRef ? cantidadAKg(catRef, suf.cantidad, suf.unidad) : suf.cantidad;
+    if (catRef && catRef.presets) {
+      var presetM = catRef.presets.find(function(p){ return p.unidadVenta === suf.unidad && p.cantidad === suf.cantidad; });
+      if (presetM) bolsaLabel = presetM.label;
+    }
   } else if (HIST_COSTO_PROVEEDOR.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(nombreRaw)) {
     tipo = "fruta_suelta";
     frutas = [normalizarFruta(nombreRaw)];
   }
 
-  return { tipo: tipo, frutas: frutas, qty: qty, mult: mult, kgEquivalente: kgEquivalente };
+  return { tipo: tipo, frutas: frutas, qty: qty, mult: mult, kgEquivalente: kgEquivalente, bolsaLabel: bolsaLabel };
 }
 
 /**
@@ -2035,9 +2040,13 @@ function calcularCompraProveedor(datos, fecha) {
 
     } else if (p.tipo === "mercado_kg") {
       var mn = p.frutas[0];
-      if (!mercadoKg[mn]) mercadoKg[mn] = { kg:0, clientes:[] };
+      if (!mercadoKg[mn]) mercadoKg[mn] = { kg:0, clientes:[], bolsas:{} };
       mercadoKg[mn].kg += p.kgEquivalente;
-      mercadoKg[mn].clientes.push({ nombre: cliente, kg: p.kgEquivalente });
+      mercadoKg[mn].clientes.push({ nombre: cliente, kg: p.kgEquivalente, bolsaLabel: p.bolsaLabel });
+      // Productos de bolsa fija (ej. Jamaica 250g/500g/1kg): cada fila = 1 bolsa
+      // de ese tamaño, así que se cuenta por fila, no por `qty` (qty ahí es
+      // los gramos/kg de la bolsa, no cuántas bolsas son).
+      if (p.bolsaLabel) mercadoKg[mn].bolsas[p.bolsaLabel] = (mercadoKg[mn].bolsas[p.bolsaLabel] || 0) + 1;
 
     } else if (p.tipo === "fruta_suelta") {
       var fn = p.frutas[0];
@@ -2213,6 +2222,12 @@ function calcularCompraProveedor(datos, fecha) {
     };
   });
 
+  // Texto "3 × 250 g · 1 × 500 g" — para que el proveedor sepa exactamente
+  // cuántas bolsas de cada tamaño surtir, en vez de solo el total en kg
+  // (que no distingue si fue 1 bolsa de 1kg o 4 de 250g).
+  function textoBolsas(bolsasMap) {
+    return Object.keys(bolsasMap).map(function(lbl){ return bolsasMap[lbl]+' × '+lbl; }).join(' · ');
+  }
   var mercadoKgResult = {};
   var costoTotalMercado = 0;
   Object.keys(mercadoKg).forEach(function(mn) {
@@ -2222,13 +2237,21 @@ function calcularCompraProveedor(datos, fecha) {
     var costoT = kgNec * costoU;
     costoTotalMercado += costoT;
     var cMap = {};
-    mercadoKg[mn].clientes.forEach(function(c){ cMap[c.nombre]=(cMap[c.nombre]||0)+c.kg; });
+    mercadoKg[mn].clientes.forEach(function(c){
+      if (!cMap[c.nombre]) cMap[c.nombre] = { kg:0, bolsas:{} };
+      cMap[c.nombre].kg += c.kg;
+      if (c.bolsaLabel) cMap[c.nombre].bolsas[c.bolsaLabel] = (cMap[c.nombre].bolsas[c.bolsaLabel] || 0) + 1;
+    });
     mercadoKgResult[mn] = {
       kgNecesarios: kgNec,
       costoUnitario: costoU,
       costoVigenteDesde: vigM.desde,
       costoTotal: +costoT.toFixed(2),
-      clienteDetalle: Object.entries(cMap).map(function(e){ return {nombre:e[0], kg:+e[1].toFixed(3)}; })
+      bolsas: mercadoKg[mn].bolsas,
+      bolsasTexto: textoBolsas(mercadoKg[mn].bolsas),
+      clienteDetalle: Object.entries(cMap).map(function(e){
+        return { nombre:e[0], kg:+e[1].kg.toFixed(3), bolsasTexto: textoBolsas(e[1].bolsas) };
+      })
     };
   });
 
@@ -2509,10 +2532,11 @@ function renderProveedor() {
         '<div>'+
           '<div style="color:#e8f5e8">'+emojiDeFruta(mn)+' '+mn+'</div>'+
           '<div style="color:#6b9e6b;font-size:11px;margin-top:3px">'+
-            m.clienteDetalle.map(function(cd){return cd.nombre+': '+cd.kg+'kg';}).join(' · ')+
+            m.clienteDetalle.map(function(cd){return cd.nombre+': '+(cd.bolsasTexto || (cd.kg+'kg'));}).join(' · ')+
           '</div>'+
         '</div>'+
         '<div style="text-align:right">'+
+          (m.bolsasTexto ? '<div style="color:#e8f5e8;font-size:12px">🛍️ '+m.bolsasTexto+'</div>' : '')+
           '<div style="color:#ffcc02;font-weight:bold">'+m.kgNecesarios+' kg × $'+fmtMoney(m.costoUnitario)+'</div>'+
           '<div style="color:#a8e6a3;font-size:13px">= $'+fmtMoney(m.costoTotal)+'</div>'+
           '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+m.costoVigenteDesde+'</div>'+

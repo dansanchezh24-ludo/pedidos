@@ -219,7 +219,25 @@ function costoPaqueteBerries(cat, item) {
   }
   return total;
 }
+// Costo REAL de proveedor para productos de Ludo Mercado con presets de bolsa
+// fija (ej. Jamaica) que además tienen historial de $/kg (HIST_COSTO_PROVEEDOR_KG).
+// preset.costo es solo la referencia de cuánto se le cobra a "Precio familiar"
+// (ver precioUnitario), NO lo que realmente cuesta la bolsa — eso depende del
+// $/kg vigente en HIST_COSTO_PROVEEDOR_KG a la fecha del pedido. Sin esto, el
+// costo guardado en Sheets usaba preset.costo también para el margen, así que
+// en modo familiar (donde se cobra preset.costo) la ganancia guardada salía
+// en $0 aunque el costo real de proveedor fuera menor. Devuelve el costo TOTAL
+// de la bolsa, o null si `cat` no aplica (para que costoUnitario() siga normal).
+function costoRealProveedorKg(cat, item) {
+  if (cat.unidad !== "kg" || !HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(cat.nombre) || !item) return null;
+  var fechaInput = document.getElementById("fecha").value;
+  var fecha = fechaInput || new Date().toISOString().slice(0,10);
+  var kgEq = cantidadAKg(cat, item.cantidad, item.unidadVenta || "kg");
+  return kgEq * costoVigente(HIST_COSTO_PROVEEDOR_KG[cat.nombre], fecha).costo;
+}
 function costoUnitario(cat, item) {
+  var costoReal = costoRealProveedorKg(cat, item);
+  if (costoReal != null) return costoReal / item.cantidad;
   var preset = findPresetActivo(cat, item);
   if (preset && preset.costo != null) return preset.costo / item.cantidad;
   var costoPaquete = costoPaqueteBerries(cat, item);

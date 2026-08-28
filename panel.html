@@ -2653,7 +2653,9 @@ function renderProveedor() {
     lineas.push(P[pn].piezas+" pz — "+pn);
   });
   Object.keys(M).sort().forEach(function(mn){
-    lineas.push(M[mn].kgNecesarios+" kg — "+mn);
+    // Productos de bolsa fija (ej. Jamaica): mostrar cuántas bolsas de cada
+    // tamaño en vez del total en kg, que no distingue 250g/500g/1kg.
+    lineas.push((M[mn].bolsasTexto || (M[mn].kgNecesarios+" kg"))+" — "+mn);
   });
   Object.keys(H).sort().forEach(function(hn){
     lineas.push(H[hn].unidades+" — "+hn);
@@ -2702,7 +2704,7 @@ function renderProveedor() {
   });
   Object.keys(M).sort().forEach(function(mn){
     lineasHTML += '<div class="pedido-line">'+
-      '<span class="pedido-cant">'+M[mn].kgNecesarios+' kg</span>'+
+      '<span class="pedido-cant">'+(M[mn].bolsasTexto || (M[mn].kgNecesarios+' kg'))+'</span>'+
       '<span class="pedido-fruta">'+emojiDeFruta(mn)+' '+mn+'</span>'+
     '</div>';
   });

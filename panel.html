@@ -571,8 +571,20 @@ function filasVenta(r) {
     var suf = parseSufijoUnidad(nombreRaw);
     var unidadLbl = suf.unidad === "gramos" ? "gramos" : suf.unidad === "pieza" ? "pieza" : "kg";
     var vigMercado = costoVigente(HIST_COSTO_PROVEEDOR_KG[mn], fecha);
-    var costoMercado = p.kgEquivalente * vigMercado.costo;
-    return [{ fruta:mn, nombreComercial:mn, presentacion:unidadLbl, presentacionComprada:"kg", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo: costoMercado, costoVigenteDesde: vigMercado.desde, costoVigenteHasta: vigMercado.hasta, costoUnitarioNominal: vigMercado.costo }];
+    var costoMercado, costoUnitNomMercado;
+    if (p.costoBolsaFija != null) {
+      // Bolsas de tamaño fijo (ej. Jamaica): el proveedor cobra el costo real
+      // de esa bolsa, NO proporcional al kg (ver costoBolsaFija en
+      // parsearProducto). costoUnitarioNominal se ajusta al $/kg efectivo de
+      // ESTA bolsa para que cantidadComprada (costo ÷ costoUnitarioNominal,
+      // ver abajo) siga reflejando los kg reales de esta línea.
+      costoMercado = p.costoBolsaFija;
+      costoUnitNomMercado = p.kgEquivalente > 0 ? p.costoBolsaFija / p.kgEquivalente : vigMercado.costo;
+    } else {
+      costoMercado = p.kgEquivalente * vigMercado.costo;
+      costoUnitNomMercado = vigMercado.costo;
+    }
+    return [{ fruta:mn, nombreComercial:mn, presentacion:unidadLbl, presentacionComprada:"kg", cantidad:qty, importe:importeTotal, mes:mes, fecha:fecha, costo: costoMercado, costoVigenteDesde: vigMercado.desde, costoVigenteHasta: vigMercado.hasta, costoUnitarioNominal: costoUnitNomMercado }];
   }
   if (p.tipo === "fruta_suelta") {
     var fn = p.frutas[0];
@@ -1912,6 +1924,7 @@ function parsearProducto(nombreRaw, cantidad) {
   var mult = 1; // cajas (clamshells) representadas por cada unidad pedida
   var kgEquivalente = 0;
   var bolsaLabel = null; // "250 g"/"500 g"/"1 kg" si el producto usa presets de bolsa fija (ej. Jamaica)
+  var costoBolsaFija = null; // costo REAL fijo de esa bolsa (preset.costo) — no proporcional al kg
 
   if (nombreRaw.indexOf("Ludo Berry Max") !== -1) {
     // Ludo Berry Max = Fresa + Ludo Berry Mix: 1 clamshell de Fresa (implícito, no es slot)
@@ -1973,14 +1986,20 @@ function parsearProducto(nombreRaw, cantidad) {
     kgEquivalente = catRef ? cantidadAKg(catRef, suf.cantidad, suf.unidad) : suf.cantidad;
     if (catRef && catRef.presets) {
       var presetM = catRef.presets.find(function(p){ return p.unidadVenta === suf.unidad && p.cantidad === suf.cantidad; });
-      if (presetM) bolsaLabel = presetM.label;
+      if (presetM) {
+        bolsaLabel = presetM.label;
+        // Las bolsas de tamaño fijo (Jamaica) no se compran al proveedor por
+        // kg — cada tamaño tiene su propio costo real, no proporcional al
+        // peso (ej. una bolsa de 250g cuesta $40, no 0.25kg × $/kg).
+        if (presetM.costo != null) costoBolsaFija = presetM.costo;
+      }
     }
   } else if (HIST_COSTO_PROVEEDOR.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_CLAMSHELL.hasOwnProperty(nombreRaw) || HIST_COSTO_PROVEEDOR_KG.hasOwnProperty(nombreRaw)) {
     tipo = "fruta_suelta";
     frutas = [normalizarFruta(nombreRaw)];
   }
 
-  return { tipo: tipo, frutas: frutas, qty: qty, mult: mult, kgEquivalente: kgEquivalente, bolsaLabel: bolsaLabel };
+  return { tipo: tipo, frutas: frutas, qty: qty, mult: mult, kgEquivalente: kgEquivalente, bolsaLabel: bolsaLabel, costoBolsaFija: costoBolsaFija };
 }
 
 /**
@@ -2040,13 +2059,18 @@ function calcularCompraProveedor(datos, fecha) {
 
     } else if (p.tipo === "mercado_kg") {
       var mn = p.frutas[0];
-      if (!mercadoKg[mn]) mercadoKg[mn] = { kg:0, clientes:[], bolsas:{} };
+      if (!mercadoKg[mn]) mercadoKg[mn] = { kg:0, kgSuelto:0, clientes:[], bolsas:{}, costoBolsasFijo:0 };
       mercadoKg[mn].kg += p.kgEquivalente;
       mercadoKg[mn].clientes.push({ nombre: cliente, kg: p.kgEquivalente, bolsaLabel: p.bolsaLabel });
       // Productos de bolsa fija (ej. Jamaica 250g/500g/1kg): cada fila = 1 bolsa
       // de ese tamaño, así que se cuenta por fila, no por `qty` (qty ahí es
-      // los gramos/kg de la bolsa, no cuántas bolsas son).
+      // los gramos/kg de la bolsa, no cuántas bolsas son). El proveedor NO
+      // cobra estas bolsas proporcional al kg — cada tamaño tiene su costo
+      // real fijo (costoBolsaFija), así que se suma aparte de kgSuelto (lo
+      // que sí se compra suelto por kg: Tuna, Rambután, Limón, etc.).
       if (p.bolsaLabel) mercadoKg[mn].bolsas[p.bolsaLabel] = (mercadoKg[mn].bolsas[p.bolsaLabel] || 0) + 1;
+      if (p.costoBolsaFija != null) mercadoKg[mn].costoBolsasFijo += p.costoBolsaFija;
+      else mercadoKg[mn].kgSuelto += p.kgEquivalente;
 
     } else if (p.tipo === "fruta_suelta") {
       var fn = p.frutas[0];
@@ -2234,7 +2258,12 @@ function calcularCompraProveedor(datos, fecha) {
     var kgNec = +mercadoKg[mn].kg.toFixed(3);
     var vigM = costoVigente(HIST_COSTO_PROVEEDOR_KG[mn], fecha);
     var costoU = vigM.costo || 0;
-    var costoT = kgNec * costoU;
+    // El costo real NO es kgNec × $/kg cuando hay bolsas de tamaño fijo (ej.
+    // Jamaica): cada bolsa (250g/500g/1kg) tiene su propio costo real al
+    // proveedor, no proporcional al peso. Solo lo que se compra suelto por
+    // kg (kgSuelto: Tuna, Rambután, Limón, Maracuyá, Ciruela) usa el $/kg
+    // vigente — las bolsas usan costoBolsasFijo, ya sumado por bolsa.
+    var costoT = mercadoKg[mn].costoBolsasFijo + (mercadoKg[mn].kgSuelto * costoU);
     costoTotalMercado += costoT;
     var cMap = {};
     mercadoKg[mn].clientes.forEach(function(c){
@@ -2247,6 +2276,8 @@ function calcularCompraProveedor(datos, fecha) {
       costoUnitario: costoU,
       costoVigenteDesde: vigM.desde,
       costoTotal: +costoT.toFixed(2),
+      costoBolsasFijo: +mercadoKg[mn].costoBolsasFijo.toFixed(2),
+      kgSuelto: +mercadoKg[mn].kgSuelto.toFixed(3),
       bolsas: mercadoKg[mn].bolsas,
       bolsasTexto: textoBolsas(mercadoKg[mn].bolsas),
       clienteDetalle: Object.entries(cMap).map(function(e){
@@ -2537,7 +2568,11 @@ function renderProveedor() {
         '</div>'+
         '<div style="text-align:right">'+
           (m.bolsasTexto ? '<div style="color:#e8f5e8;font-size:12px">🛍️ '+m.bolsasTexto+'</div>' : '')+
-          '<div style="color:#ffcc02;font-weight:bold">'+m.kgNecesarios+' kg × $'+fmtMoney(m.costoUnitario)+'</div>'+
+          // Las bolsas de tamaño fijo (Jamaica) cuestan su costo real por
+          // bolsa, no proporcional al kg — solo lo comprado suelto (kgSuelto)
+          // se muestra como "kg × $/kg". Si hay de ambos, se ven las 2 líneas.
+          (m.costoBolsasFijo > 0 ? '<div style="color:#ffcc02;font-weight:bold">bolsas = $'+fmtMoney(m.costoBolsasFijo)+'</div>' : '')+
+          (m.kgSuelto > 0 ? '<div style="color:#ffcc02;font-weight:bold">'+m.kgSuelto+' kg × $'+fmtMoney(m.costoUnitario)+'</div>' : '')+
           '<div style="color:#a8e6a3;font-size:13px">= $'+fmtMoney(m.costoTotal)+'</div>'+
           '<div style="color:#6b9e6b;font-size:10px;margin-top:2px">vigente desde '+m.costoVigenteDesde+'</div>'+
         '</div>';

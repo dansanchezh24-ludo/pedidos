@@ -19,6 +19,25 @@ App web de gestión de pedidos para la tienda de berries y elotes. Dos páginas 
 - Datos guardados en **Google Sheets** vía Google Apps Script (no localStorage)
 - Deploy: GitHub Pages (gratis, automático)
 
+## ⚠️ Antes de tocar código (evitar trabajo duplicado)
+
+Este repo se trabaja desde varias sesiones de Claude en paralelo (distintos días,
+distintas conversaciones). Pasó que dos sesiones arreglaron el mismo bug de
+costeo de Jamaica por separado (2026-08-27 y 2026-09-03) sin que la segunda
+supiera que la primera ya lo había resuelto y publicado — el `git push` se
+rechazó por "fetch first" y hubo que descartar el commit redundante.
+
+**Regla:** antes de empezar a editar `config.js`/`index.html`/`panel.html`,
+correr:
+```bash
+git fetch origin && git log --oneline main..origin/main
+```
+Si hay commits ahí que no están en local, revisarlos primero (pueden ya
+resolver lo que se está por hacer, sobre todo en temas de costeo/precios que
+el usuario itera seguido). Después de resolver algo no obvio, dejarlo anotado
+en memoria (ver `[[feedback-git-fetch-before-shared-edits]]`) para que la
+siguiente sesión no repita el trabajo.
+
 ## Archivos
 | Archivo | Quién lo usa | Qué hace |
 |---|---|---|

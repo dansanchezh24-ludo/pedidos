@@ -768,20 +768,62 @@ function fmtRangoVigencia(desde, hasta) {
   return fmtFechaCorta(desde) + " – " + (hasta ? fmtFechaCorta(hasta) : "a la fecha");
 }
 
+// Costo real de una línea de filasVenta: directo si ya lo trae, o vía la
+// tarifa pooleada por fruta+fecha cuando depende del redondeo a bote
+// compartido de ese día (ver calcularCostoPorFrutaFecha).
+function resolverCostoFila(f, costoPorFrutaFecha) {
+  if (f.costo != null) return f.costo;
+  return (f.cajas || 0) * (costoPorFrutaFecha[f.fruta + "||" + f.fecha] || 0);
+}
+
+/**
+ * Factor $venta/$costo por nombreComercial para los productos multi-fruta
+ * (Mix/Max) y Familiar — mismo criterio que calcularTablaVentas: filasVenta
+ * reparte el precio de esos pedidos PAREJO entre sus frutas porque en ese
+ * momento el costo real por bote de cada fruta aún no está resuelto (depende
+ * del redondeo compartido de esa fecha). Una vez resuelto, aquí se calcula
+ * el factor de todo el nombreComercial para poder reasignar cada línea
+ * proporcional a su costo real — así "VENTAS/UTILIDADES POR MES Y FRUTA"
+ * coinciden con "DETALLE DE VENTAS POR PRODUCTO" en vez de mostrar el
+ * reparto parejo crudo (que puede hacer ver pérdida en una fruta cara como
+ * la fresa cuando en realidad deja utilidad).
+ */
+function calcularFactoresRedistribucion(datos, costoPorFrutaFecha) {
+  var porNombre = {}; // nombreComercial -> {totalImporte, totalCosto}
+  datos.forEach(function(r){
+    filasVenta(r).forEach(function(f){
+      if (PRODUCTOS_MULTIFRUTA.indexOf(f.nombreComercial) === -1 && !esNombreFamiliar(f.nombreComercial)) return;
+      if (!porNombre[f.nombreComercial]) porNombre[f.nombreComercial] = { totalImporte:0, totalCosto:0 };
+      porNombre[f.nombreComercial].totalImporte += f.importe;
+      porNombre[f.nombreComercial].totalCosto += resolverCostoFila(f, costoPorFrutaFecha);
+    });
+  });
+  var factores = {};
+  Object.keys(porNombre).forEach(function(nombre){
+    var p = porNombre[nombre];
+    if (p.totalCosto > 0) factores[nombre] = p.totalImporte / p.totalCosto;
+  });
+  return factores;
+}
+
 /**
  * Matriz fruta × mes con el importe vendido de cada fruta en cada mes.
  * Regresa { frutas:[...ordenadas por total desc], meses:[...ordenados asc],
  *           datos: { fruta: { mes: importe } }, totalesFruta: { fruta: total } }
  */
 function calcularVentasPorMes(datos) {
+  var costoPorFrutaFecha = calcularCostoPorFrutaFecha(datos);
+  var factores = calcularFactoresRedistribucion(datos, costoPorFrutaFecha);
   var celdas = {}; // "fruta||mes" -> importe
   var totalesFruta = {};
   var mesesSet = {};
   datos.forEach(function(r) {
     filasVenta(r).forEach(function(f){
+      var factor = factores[f.nombreComercial];
+      var importe = factor != null ? resolverCostoFila(f, costoPorFrutaFecha) * factor : f.importe;
       var key = f.fruta + "||" + f.mes;
-      celdas[key] = (celdas[key] || 0) + f.importe;
-      totalesFruta[f.fruta] = (totalesFruta[f.fruta] || 0) + f.importe;
+      celdas[key] = (celdas[key] || 0) + importe;
+      totalesFruta[f.fruta] = (totalesFruta[f.fruta] || 0) + importe;
       mesesSet[f.mes] = true;
     });
   });
@@ -797,24 +839,22 @@ function calcularVentasPorMes(datos) {
 
 /**
  * Igual que calcularVentasPorMes pero con utilidad (importe - costo) en vez
- * de importe — el costo de cada línea se resuelve igual que en
- * calcularUtilidadPorCliente (directo si filasVenta ya lo trae, o vía la
- * tarifa pooleada por fruta+fecha cuando depende del redondeo a bote
- * compartido de ese día).
+ * de importe. El importe de cada línea usa el mismo factor de redistribución
+ * que calcularVentasPorMes (ver calcularFactoresRedistribucion) para que
+ * ambas tablas —y el detalle de ventas por producto— coincidan.
  */
 function calcularUtilidadPorMes(datos) {
   var costoPorFrutaFecha = calcularCostoPorFrutaFecha(datos);
+  var factores = calcularFactoresRedistribucion(datos, costoPorFrutaFecha);
   var celdas = {}; // "fruta||mes" -> utilidad
   var totalesFruta = {};
   var mesesSet = {};
   datos.forEach(function(r) {
     filasVenta(r).forEach(function(f){
-      var costo = f.costo;
-      if (costo == null) {
-        var rate = costoPorFrutaFecha[f.fruta + "||" + f.fecha] || 0;
-        costo = (f.cajas || 0) * rate;
-      }
-      var utilidad = f.importe - costo;
+      var costo = resolverCostoFila(f, costoPorFrutaFecha);
+      var factor = factores[f.nombreComercial];
+      var importe = factor != null ? costo * factor : f.importe;
+      var utilidad = importe - costo;
       var key = f.fruta + "||" + f.mes;
       celdas[key] = (celdas[key] || 0) + utilidad;
       totalesFruta[f.fruta] = (totalesFruta[f.fruta] || 0) + utilidad;

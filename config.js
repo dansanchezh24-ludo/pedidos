@@ -73,7 +73,7 @@ var CATALOGO = [
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg",  precio:120, costo:100},
       {cantidad:500,unidadVenta:"gramos", label:"500 g", precio:70,  costo:60},
-      {cantidad:250,unidadVenta:"gramos", label:"250 g", precio:60,  costo:45}
+      {cantidad:250,unidadVenta:"gramos", label:"250 g", precio:60,  costo:50}
     ] },
   // Renombrado 2026-09-21 (antes "Bolsa Chile árbol 250 gr") para distinguirlo
   // del fresco de arriba, a pedido del usuario — mismo producto físico, mismo
@@ -100,8 +100,8 @@ var CATALOGO = [
   { id:"chile_habanero",   nombre:"Habanero",                      precio:120, costo:90,  unidad:"kg", slots:0, emoji:"🌶️",
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg",  precio:120, costo:90},
-      {cantidad:500,unidadVenta:"gramos", label:"500 g", precio:70,  costo:55},
-      {cantidad:250,unidadVenta:"gramos", label:"250 g", precio:60,  costo:30}
+      {cantidad:500,unidadVenta:"gramos", label:"500 g", precio:70,  costo:60},
+      {cantidad:250,unidadVenta:"gramos", label:"250 g", precio:60,  costo:40}
     ] },
   { id:"higo",            nombre:"Higo",                          precio:100, costo:60,  slots:0, emoji:"🟤" },
   { id:"chile_hungaro",    nombre:"Húngaro",                       precio:60,  costo:40,  unidad:"kg", slots:0, emoji:"🌶️",
@@ -125,7 +125,7 @@ var CATALOGO = [
       {cantidad:500,unidadVenta:"gramos", label:"500 g", precio:150, costo:60},
       {cantidad:250,unidadVenta:"gramos", label:"250 g", precio:80,  costo:40}
     ] },
-  { id:"limon_persa",      nombre:"Limón persa sin semilla",       precio:50,  costo:37,  unidad:"kg", piezasPorKg:10, slots:0, emoji:"🍋" },
+  { id:"limon_persa",      nombre:"Limón persa sin semilla",       precio:50,  costo:40,  unidad:"kg", piezasPorKg:10, slots:0, emoji:"🍋" },
   { id:"ludo_pack",        nombre:"Ludo Berry 3-Pack",             precio:150, costo:60,  slots:1, emoji:"📦" },
   { id:"ludo_berry_max",   nombre:"Ludo Berry Max",                precio:230, costo:225, slots:3, emoji:"✨",
     frutasFijas: ["Zarzamora","Frambuesa","Blueberry"] }, // + Fresa implícita (ver costoPaqueteBerries en index.html y parsearProducto en panel.html) — no elegible, siempre las mismas 3 + fresa.
@@ -140,7 +140,7 @@ var CATALOGO = [
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg",  precio:120, costo:100},
       {cantidad:500,unidadVenta:"gramos", label:"500 g", precio:70,  costo:60},
-      {cantidad:250,unidadVenta:"gramos", label:"250 g", precio:60,  costo:45}
+      {cantidad:250,unidadVenta:"gramos", label:"250 g", precio:60,  costo:50}
     ] },
   { id:"maracuya",        nombre:"Maracuyá",                      precio:100, costo:60,  unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟠" },
   // Poblano y Morrón (todos los colores): compra mínima 1 kg, sin bolsas chicas
@@ -150,7 +150,7 @@ var CATALOGO = [
   { id:"morron_naranja",   nombre:"Morrón naranja",                precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, slots:0, emoji:"🫑" },
   { id:"morron_rojo",      nombre:"Morrón rojo",                   precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, slots:0, emoji:"🫑" },
   { id:"morron_verde",     nombre:"Morrón verde",                  precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, slots:0, emoji:"🫑" },
-  { id:"pitahaya",         nombre:"Pitahaya",                      precio:100, costo:76,  slots:0, emoji:"🐉" },
+  { id:"pitahaya",         nombre:"Pitahaya",                      precio:100, costo:80,  slots:0, emoji:"🐉" },
   { id:"chile_poblano",    nombre:"Poblano",                       precio:60,  costo:40,  unidad:"kg", ventaMinKg:1, slots:0, emoji:"🌶️" },
   { id:"rambutan",         nombre:"Rambután",                      precio:90,  costo:50,  unidad:"kg", piezasPorKg:30, slots:0, emoji:"🔴" },
   { id:"chile_serrano",    nombre:"Serrano",                       precio:60,  costo:40,  unidad:"kg", slots:0, emoji:"🌶️",
@@ -192,7 +192,7 @@ var HIST_COSTO_PROVEEDOR_CLAMSHELL = {
 };
 var HIST_COSTO_PROVEEDOR_KG = {
   "Blueberry chica kg": [ {desde:"2000-01-01", costo:40} ],
-  "Limón persa sin semilla": [ {desde:"2026-06-30", costo:37} ],
+  "Limón persa sin semilla": [ {desde:"2026-06-30", costo:37}, {desde:"2026-09-21", costo:40} ],
   "Tuna":                     [ {desde:"2026-06-30", costo:27}, {desde:"2026-07-23", costo:40} ],
   "Maracuyá":                 [ {desde:"2026-06-30", costo:60} ],
   "Rambután":                 [ {desde:"2026-06-30", costo:50} ],
@@ -220,7 +220,7 @@ var HIST_COSTO_PROVEEDOR_KG = {
 // Productos vendidos por pieza individual, fuera de la familia de elotes.
 var HIST_COSTO_PIEZA = {
   "Coco (café)": [ {desde:"2026-06-30", costo:40} ],
-  "Pitahaya":    [ {desde:"2026-06-30", costo:76} ],
+  "Pitahaya":    [ {desde:"2026-06-30", costo:76}, {desde:"2026-09-21", costo:80} ],
   // Ajo — presets no proporcionales (ver CATALOGO.ajo_pelado.presets), cada bolsa
   // se costea como pieza propia (el nombre guardado ya trae el sufijo de tamaño).
   "Bote ajo pelado (150 g)": [ {desde:"2026-08-05", costo:45} ],

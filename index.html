@@ -127,7 +127,17 @@ function getFrutasDisponibles(catId) {
 }
 
 var MERCADO = ["limon_persa","tuna","maracuya","rambutan","ciruela_roja","jamaica","coco_cafe","pitahaya","cereza","higo","elote_blanco",
-  "huevo_12","huevo_18","chile_arbol_250","ajo_pelado","concentrado_pulpas"];
+  "huevo_12","huevo_18","chile_arbol_250","ajo_pelado","concentrado_pulpas",
+  "chile_serrano","chile_jalapeno","chile_hungaro","chile_caloro","chile_poblano",
+  "morron_verde","morron_rojo","morron_naranja","morron_amarillo",
+  "chile_habanero","chile_arbol_verde","chile_manzano"];
+
+// Chiles/morrones — se agrupan aparte en el <select> de captura bajo un
+// <optgroup label="Chiles"> (ver renderItems) en vez de aparecer sueltos
+// entre el resto de Ludo Mercado.
+var CHILES_IDS = ["chile_arbol_250","chile_serrano","chile_jalapeno","chile_hungaro","chile_caloro",
+  "chile_poblano","morron_verde","morron_rojo","morron_naranja","morron_amarillo",
+  "chile_habanero","chile_arbol_verde","chile_manzano"];
 
 function getCatalogoDisponible() {
   if (precioFamiliar) {
@@ -351,11 +361,15 @@ function renderItems() {
       while (item.frutas.length < cat.slots) item.frutas.push(frutasDisp[0]);
       if (item.frutas.length > cat.slots) item.frutas = item.frutas.slice(0, cat.slots);
     }
-    var opts = catDisp.map(function(c){
+    function opcionHtml(c) {
       var base = precioFamiliar ? c.costo : c.precio;
       var label = c.unidad === "kg" ? ("$"+fmtMoney(base)+"/kg") : ("$"+fmtMoney(base));
       return '<option value="'+c.id+'"'+(c.id===item.catId?' selected':'')+'>'+c.emoji+' '+c.nombre+' — '+label+'</option>';
-    }).join("");
+    }
+    var otrosProd = catDisp.filter(function(c){ return CHILES_IDS.indexOf(c.id) === -1; });
+    var chilesProd = catDisp.filter(function(c){ return CHILES_IDS.indexOf(c.id) !== -1; });
+    var opts = otrosProd.map(opcionHtml).join("") +
+      (chilesProd.length ? '<optgroup label="Chiles">'+chilesProd.map(opcionHtml).join("")+'</optgroup>' : "");
     var div = document.createElement("div");
     div.className = "prod-card";
     var row1 = document.createElement("div");
@@ -388,6 +402,7 @@ function renderItems() {
       var toggle = document.createElement("div");
       toggle.className = "unit-toggle";
       [["kg","Kg"],["gramos","Gramos"],["pieza","Pieza"]].filter(function(u){
+        if (cat.ventaMinKg) return u[0] === "kg"; // compra mínima 1 kg: sin gramos ni pieza suelta.
         return u[0] !== "pieza" || cat.piezasPorKg;
       }).forEach(function(u){
         var b = document.createElement("button");
@@ -433,9 +448,10 @@ function renderItems() {
       rowQ.innerHTML = '<span style="margin-left:auto;color:#a8e6a3;font-weight:bold;font-size:15px">$'+fmtMoney(precioLinea)+'</span>';
     } else if (cat.unidad === "kg" && item.unidadVenta !== "pieza") {
       var esGramos = item.unidadVenta === "gramos";
+      var stepMin = cat.ventaMinKg ? cat.ventaMinKg : (esGramos ? "10" : "0.1");
       rowQ.innerHTML =
         '<span style="color:#7ec87a;font-size:11px;letter-spacing:1px">'+(esGramos?"GR.":"KG")+'</span>'+
-        '<input type="number" class="qty-num" data-i="'+i+'" value="'+item.cantidad+'" step="'+(esGramos?"10":"0.1")+'" min="'+(esGramos?"10":"0.1")+'">'+
+        '<input type="number" class="qty-num" data-i="'+i+'" value="'+item.cantidad+'" step="'+stepMin+'" min="'+stepMin+'">'+
         '<span style="margin-left:auto;color:#a8e6a3;font-weight:bold;font-size:15px">$'+fmtMoney(precioLinea)+'</span>';
     } else {
       rowQ.innerHTML =

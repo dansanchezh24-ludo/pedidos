@@ -45,9 +45,11 @@ var CAJAS_POR_BOTE = 3;
 //   (cambiado 2026-09-21 de 250g/500g/1kg — el usuario pidió una escalera pensada
 //   en consumo semanal: 200g=chico, 400g=regular, 700g=grande, 1kg=mayoreo).
 //   precio/costo TOTAL fijo por bolsa, no proporcional al peso. El de 1kg usa el
-//   costo real de proveedor tal cual; 200/400/700g usan costo = $8 fijo +
-//   (costo_real_1kg/1000)×gramos — mismo criterio en los 7 chiles, solo cambia
-//   la tasa por kg de cada uno. El label de cada preset incluye piezas aproximadas
+//   costo real de proveedor tal cual; 200/400/700g usan costo = $10 fijo por
+//   transacción (cargo fijo real de empacar/surtir una bolsa chica, subido de
+//   $8 a $10 el 2026-09-22 a pedido del usuario) + (costo_real_1kg/1000)×gramos
+//   — mismo criterio en los 7 chiles, solo cambia la tasa por kg de cada uno.
+//   El label de cada preset incluye piezas aproximadas
 //   ("200 g (~20 pz)") — estimado por peso típico de cada variedad, NO medido con
 //   una báscula real del proveedor; si se pesa una muestra real, recalcular precio
 //   y piezas de los 4 tamaños. Se agrupan aparte en el <select> de index.html vía
@@ -64,9 +66,9 @@ var CATALOGO = [
   { id:"chile_caloro",     nombre:"Caloro",                        precio:60,  costo:40,  unidad:"kg", slots:0, emoji:"🌶️",
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg (~62 pz)",  precio:60, costo:40},
-      {cantidad:700,unidadVenta:"gramos", label:"700 g (~44 pz)", precio:50, costo:36},
-      {cantidad:400,unidadVenta:"gramos", label:"400 g (~25 pz)", precio:40, costo:24},
-      {cantidad:200,unidadVenta:"gramos", label:"200 g (~12 pz)", precio:30, costo:16}
+      {cantidad:700,unidadVenta:"gramos", label:"700 g (~44 pz)", precio:50, costo:38},
+      {cantidad:400,unidadVenta:"gramos", label:"400 g (~25 pz)", precio:40, costo:26},
+      {cantidad:200,unidadVenta:"gramos", label:"200 g (~12 pz)", precio:30, costo:18}
     ] },
   { id:"cereza",         nombre:"Cereza",                        precio:120, costo:70,  slots:0, emoji:"🍒" },
   { id:"ludo_tomatizado",  nombre:"Cherry 3-Pack",                 precio:140, costo:60,  slots:1, emoji:"🍅", frutasPermitidas: FRUTAS_CHERRY },
@@ -78,9 +80,9 @@ var CATALOGO = [
   { id:"chile_arbol_verde", nombre:"Chile de árbol fresco (verde)", precio:120, costo:100, unidad:"kg", slots:0, emoji:"🌶️",
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg (~286 pz)",  precio:120, costo:100},
-      {cantidad:700,unidadVenta:"gramos", label:"700 g (~200 pz)", precio:100, costo:78},
-      {cantidad:400,unidadVenta:"gramos", label:"400 g (~114 pz)", precio:80,  costo:48},
-      {cantidad:200,unidadVenta:"gramos", label:"200 g (~57 pz)",  precio:60,  costo:28}
+      {cantidad:700,unidadVenta:"gramos", label:"700 g (~200 pz)", precio:100, costo:80},
+      {cantidad:400,unidadVenta:"gramos", label:"400 g (~114 pz)", precio:80,  costo:50},
+      {cantidad:200,unidadVenta:"gramos", label:"200 g (~57 pz)",  precio:60,  costo:30}
     ] },
   // Renombrado 2026-09-21 (antes "Bolsa Chile árbol 250 gr") para distinguirlo
   // del fresco de arriba, a pedido del usuario — mismo producto físico, mismo
@@ -107,17 +109,17 @@ var CATALOGO = [
   { id:"chile_habanero",   nombre:"Habanero",                      precio:120, costo:90,  unidad:"kg", slots:0, emoji:"🌶️",
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg (~111 pz)", precio:120, costo:90},
-      {cantidad:700,unidadVenta:"gramos", label:"700 g (~78 pz)", precio:100, costo:71},
-      {cantidad:400,unidadVenta:"gramos", label:"400 g (~44 pz)", precio:80,  costo:44},
-      {cantidad:200,unidadVenta:"gramos", label:"200 g (~22 pz)", precio:60,  costo:26}
+      {cantidad:700,unidadVenta:"gramos", label:"700 g (~78 pz)", precio:100, costo:73},
+      {cantidad:400,unidadVenta:"gramos", label:"400 g (~44 pz)", precio:80,  costo:46},
+      {cantidad:200,unidadVenta:"gramos", label:"200 g (~22 pz)", precio:60,  costo:28}
     ] },
   { id:"higo",            nombre:"Higo",                          precio:100, costo:60,  slots:0, emoji:"🟤" },
   { id:"chile_hungaro",    nombre:"Húngaro",                       precio:60,  costo:40,  unidad:"kg", slots:0, emoji:"🌶️",
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg (~45 pz)",  precio:60, costo:40},
-      {cantidad:700,unidadVenta:"gramos", label:"700 g (~32 pz)", precio:50, costo:36},
-      {cantidad:400,unidadVenta:"gramos", label:"400 g (~18 pz)", precio:40, costo:24},
-      {cantidad:200,unidadVenta:"gramos", label:"200 g (~9 pz)",  precio:30, costo:16}
+      {cantidad:700,unidadVenta:"gramos", label:"700 g (~32 pz)", precio:50, costo:38},
+      {cantidad:400,unidadVenta:"gramos", label:"400 g (~18 pz)", precio:40, costo:26},
+      {cantidad:200,unidadVenta:"gramos", label:"200 g (~9 pz)",  precio:30, costo:18}
     ] },
   { id:"ind_1",          nombre:"Individual (clamshell) 1x",     precio:50,  costo:15,  slots:1, emoji:"📦" },
   { id:"ind_2",            nombre:"Individual (clamshell) 2x",     precio:90,  costo:30,  slots:2, emoji:"📦" },
@@ -125,9 +127,9 @@ var CATALOGO = [
   { id:"chile_jalapeno",   nombre:"Jalapeño",                      precio:60,  costo:40,  unidad:"kg", slots:0, emoji:"🌶️",
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg (~56 pz)",  precio:60, costo:40},
-      {cantidad:700,unidadVenta:"gramos", label:"700 g (~39 pz)", precio:50, costo:36},
-      {cantidad:400,unidadVenta:"gramos", label:"400 g (~22 pz)", precio:40, costo:24},
-      {cantidad:200,unidadVenta:"gramos", label:"200 g (~11 pz)", precio:30, costo:16}
+      {cantidad:700,unidadVenta:"gramos", label:"700 g (~39 pz)", precio:50, costo:38},
+      {cantidad:400,unidadVenta:"gramos", label:"400 g (~22 pz)", precio:40, costo:26},
+      {cantidad:200,unidadVenta:"gramos", label:"200 g (~11 pz)", precio:30, costo:18}
     ] },
   { id:"jamaica",        nombre:"Jamaica",                       precio:250, costo:110, unidad:"kg", slots:0, emoji:"🌺",
     presets:[
@@ -149,9 +151,9 @@ var CATALOGO = [
   { id:"chile_manzano",    nombre:"Manzano",                       precio:120, costo:100, unidad:"kg", slots:0, emoji:"🌶️",
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg (~36 pz)",  precio:120, costo:100},
-      {cantidad:700,unidadVenta:"gramos", label:"700 g (~25 pz)", precio:100, costo:78},
-      {cantidad:400,unidadVenta:"gramos", label:"400 g (~14 pz)", precio:80,  costo:48},
-      {cantidad:200,unidadVenta:"gramos", label:"200 g (~7 pz)",  precio:60,  costo:28}
+      {cantidad:700,unidadVenta:"gramos", label:"700 g (~25 pz)", precio:100, costo:80},
+      {cantidad:400,unidadVenta:"gramos", label:"400 g (~14 pz)", precio:80,  costo:50},
+      {cantidad:200,unidadVenta:"gramos", label:"200 g (~7 pz)",  precio:60,  costo:30}
     ] },
   { id:"maracuya",        nombre:"Maracuyá",                      precio:100, costo:60,  unidad:"kg", piezasPorKg:10, slots:0, emoji:"🟠" },
   // Poblano y Morrón (todos los colores): compra mínima 1 kg, sin bolsas chicas
@@ -177,9 +179,9 @@ var CATALOGO = [
   { id:"chile_serrano",    nombre:"Serrano",                       precio:60,  costo:40,  unidad:"kg", slots:0, emoji:"🌶️",
     presets:[
       {cantidad:1,  unidadVenta:"kg",     label:"1 kg (~100 pz)", precio:60, costo:40},
-      {cantidad:700,unidadVenta:"gramos", label:"700 g (~70 pz)", precio:50, costo:36},
-      {cantidad:400,unidadVenta:"gramos", label:"400 g (~40 pz)", precio:40, costo:24},
-      {cantidad:200,unidadVenta:"gramos", label:"200 g (~20 pz)", precio:30, costo:16}
+      {cantidad:700,unidadVenta:"gramos", label:"700 g (~70 pz)", precio:50, costo:38},
+      {cantidad:400,unidadVenta:"gramos", label:"400 g (~40 pz)", precio:40, costo:26},
+      {cantidad:200,unidadVenta:"gramos", label:"200 g (~20 pz)", precio:30, costo:18}
     ] },
   { id:"tuna",           nombre:"Tuna",                          precio:60,  costo:40,  unidad:"kg", piezasPorKg:6,  slots:0, emoji:"🌵" },
   { id:"zarzamora",        nombre:"Zarzamora",                     precio:120, costo:60,  slots:0, emoji:"🫐" },

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel 🫐</title>
-<script src="config.js?v=20260921e"></script>
+<script src="config.js?v=20260922"></script>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { min-height:100vh; background:linear-gradient(160deg,#0b1a0b 0%,#132613 60%,#0b1a0b 100%); font-family:Georgia,serif; color:#e8f5e8; display:flex; flex-direction:column; align-items:center; padding:24px 16px 40px; }
@@ -2027,10 +2027,16 @@ function parsearProducto(nombreRaw, cantidad) {
     frutas = [suf.base];
     var catRef = CATALOGO.find(function(c){ return c.nombre === suf.base; });
     kgEquivalente = catRef ? cantidadAKg(catRef, suf.cantidad, suf.unidad) : suf.cantidad;
+    // Etiqueta genérica de tamaño ("1 kg", "200 g", "3 pza") para poder agrupar
+    // "N × tamaño" en el resumen de proveedor aunque el producto NO tenga
+    // `presets` (ej. Morrón/Poblano/Tuna) — así 2 pedidos distintos de 1 kg
+    // c/u se ven como "2 × 1 kg" en vez de perderse en un solo total de 2 kg.
+    var sufUnidadAbrev = suf.unidad === "gramos" ? "g" : suf.unidad === "pieza" ? "pza" : "kg";
+    bolsaLabel = suf.cantidad + " " + sufUnidadAbrev;
     if (catRef && catRef.presets) {
       var presetM = catRef.presets.find(function(p){ return p.unidadVenta === suf.unidad && p.cantidad === suf.cantidad; });
       if (presetM) {
-        bolsaLabel = presetM.label;
+        bolsaLabel = presetM.label; // ej. "200 g (~20 pz)" — más específico que la etiqueta genérica
         // Las bolsas de tamaño fijo (Jamaica) no se compran al proveedor por
         // kg — cada tamaño tiene su propio costo real, no proporcional al
         // peso (ej. una bolsa de 250g cuesta $40, no 0.25kg × $/kg).

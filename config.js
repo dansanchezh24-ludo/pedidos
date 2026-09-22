@@ -158,13 +158,21 @@ var CATALOGO = [
   // — `ventaMinKg:1` bloquea la unidad "gramos" en el selector (ver index.html,
   // filtro del toggle UNIDAD) y fuerza min=1/step=1 en el input de cantidad.
   // Piezas por kg CONFIRMADAS por el usuario (no estimado, 2026-09-21):
-  // Poblano ~5 piezas/kg, Morrón ~4 piezas/kg (los 4 colores).
-  { id:"morron_amarillo",  nombre:"Morrón amarillo",               precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, slots:0, emoji:"🫑" },
-  { id:"morron_naranja",   nombre:"Morrón naranja",                precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, slots:0, emoji:"🫑" },
-  { id:"morron_rojo",      nombre:"Morrón rojo",                   precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, slots:0, emoji:"🫑" },
-  { id:"morron_verde",     nombre:"Morrón verde",                  precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, slots:0, emoji:"🫑" },
+  // Poblano ~5 piezas/kg, Morrón ~4 piezas/kg (los 4 colores). `piezasPorKg`
+  // usa ese dato real (sirve para costeo/stock proporcional, vía cantidadAKg).
+  // `precioPieza` (agregado 2026-09-21): precio FIJO de venta por pieza
+  // suelta — pedido explícito del usuario, $20 parejo para ambos aunque no
+  // sea proporcional al kilo (Poblano: $60/kg÷5pz=$12 proporcional, pero se
+  // cobra $20/pieza; Morrón: $80/kg÷4pz=$20, aquí sí coincide). El costo
+  // (para "Precio familiar") SÍ sigue siendo proporcional real vía
+  // `piezasPorKg` — precioUnitario() en index.html usa `precioPieza` solo
+  // para el precio normal, no para el costo.
+  { id:"morron_amarillo",  nombre:"Morrón amarillo",               precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, piezasPorKg:4, precioPieza:20, slots:0, emoji:"🫑" },
+  { id:"morron_naranja",   nombre:"Morrón naranja",                precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, piezasPorKg:4, precioPieza:20, slots:0, emoji:"🫑" },
+  { id:"morron_rojo",      nombre:"Morrón rojo",                   precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, piezasPorKg:4, precioPieza:20, slots:0, emoji:"🫑" },
+  { id:"morron_verde",     nombre:"Morrón verde",                  precio:80,  costo:50,  unidad:"kg", ventaMinKg:1, piezasPorKg:4, precioPieza:20, slots:0, emoji:"🫑" },
   { id:"pitahaya",         nombre:"Pitahaya",                      precio:100, costo:80,  slots:0, emoji:"🐉" },
-  { id:"chile_poblano",    nombre:"Poblano",                       precio:60,  costo:40,  unidad:"kg", ventaMinKg:1, slots:0, emoji:"🌶️" },
+  { id:"chile_poblano",    nombre:"Poblano",                       precio:60,  costo:40,  unidad:"kg", ventaMinKg:1, piezasPorKg:5, precioPieza:20, slots:0, emoji:"🌶️" },
   { id:"rambutan",         nombre:"Rambután",                      precio:90,  costo:50,  unidad:"kg", piezasPorKg:30, slots:0, emoji:"🔴" },
   { id:"chile_serrano",    nombre:"Serrano",                       precio:60,  costo:40,  unidad:"kg", slots:0, emoji:"🌶️",
     presets:[

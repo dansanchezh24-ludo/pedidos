@@ -272,7 +272,9 @@ function switchTab(tab) {
 // inventario" de index.html. Cuenta como venta normal (Tablero/Resumen), pero
 // NO se le vuelve a pedir al proveedor y su costo es $0 — ya se pagó (y ya se
 // cargó como merma) en la fecha en que se compró el bote original.
-function esDeInventario(r) { return String(r[14] || "").trim() === "Inventario"; }
+// También es true cuando calcularInventario la surtió automáticamente con un
+// producto de inventario no perecedero-del-día (pulpas, Jamaica, chile seco).
+function esDeInventario(r) { return !!r._deInventario || String(r[14] || "").trim() === "Inventario"; }
 
 function fmtFecha(f) {
   if (!f) return "Sin fecha";
@@ -306,6 +308,7 @@ async function cargarTablero() {
     var res=await fetch(SCRIPT_URL+"?action=read");
     var data=await res.json();
     kpiData=(data.rows||[]).slice(1).filter(function(r){return r[0]&&r[2];});
+    calcularInventario(kpiData); // marca ventas surtidas automáticamente con inventario (ver esDeInventario)
     renderTablero();
   } catch(e) {
     document.getElementById("kpiContent").innerHTML="<p style='color:#ff8a80;text-align:center;padding:20px'>"+e.message+"</p>";
@@ -1673,6 +1676,7 @@ async function cargarResumen() {
     var res=await fetch(SCRIPT_URL+"?action=read");
     var data=await res.json();
     resumenData=(data.rows||[]).slice(1).filter(function(r){return r[0]&&r[2];});
+    calcularInventario(resumenData); // marca ventas surtidas automáticamente con inventario (ver esDeInventario)
     var input=document.getElementById("fechaFiltro");
     if (!input.value) {
       var fechas=fechasValidas(resumenData);
@@ -1973,91 +1977,180 @@ async function cargarInventario() {
     var res=await fetch(SCRIPT_URL+"?action=read");
     var data=await res.json();
     inventarioData=(data.rows||[]).slice(1).filter(function(r){return r[0]&&r[2];});
+    calcularInventario(inventarioData); // marca ventas surtidas automáticamente con inventario (ver esDeInventario)
     renderInventario();
   } catch(e) {
     document.getElementById("inventarioContent").innerHTML="<p style='color:#ff8a80;text-align:center;padding:20px'>"+e.message+"</p>";
   }
 }
 
+// Compras de inventario capturadas a mano (cliente "Dan", dirección
+// "INVENTARIO", precio $0): producto ya pagado que se guarda para venderlo
+// después. Caducidad en meses desde la fecha del pedido (por tipo de
+// parsearProducto); sin entrada = no caduca (Jamaica, chile seco).
+var CADUCIDAD_INVENTARIO_MESES = { pulpa: 1 }; // pulpas en congelador
+// Nombres viejos → nombre actual, para que una venta con el nombre nuevo
+// descuente un lote capturado con el viejo.
+var ALIAS_INVENTARIO = { "Bolsa Chile árbol 250 gr": "Chile de árbol seco (rojo) 250 gr" };
+
+function esEntradaInventario(r) { return String(r[11] || "").trim().toUpperCase() === "INVENTARIO"; }
+
+function sumarMeses(fecha, meses) {
+  var d = new Date(fecha + "T12:00:00");
+  d.setMonth(d.getMonth() + meses);
+  return d.toISOString().slice(0,10);
+}
+
+// Clave y unidades de un producto de inventario no-berry. Bolsas de tamaño
+// fijo (Jamaica) guardan los gramos en "cantidad" → cada fila = 1 bolsa.
+function claveInventario(r) {
+  var nombre = String(r[0] || "").trim();
+  nombre = ALIAS_INVENTARIO[nombre] || nombre;
+  var p = parsearProducto(r[0], r[1]);
+  var unidades = p.bolsaLabel ? 1 : (parseFloat(r[1]) || 1);
+  return { clave: nombre, unidades: unidades, tipo: p.tipo };
+}
+
+// Arma el inventario completo y, como efecto, marca r._deInventario en las
+// ventas que se surtieron con él (para que Proveedor no las vuelva a pedir y
+// el Tablero no les vuelva a cargar costo). Dos fuentes de lotes:
+//  1) Berries: sobrante del redondeo a bote de cada fecha (automático). Solo
+//     se descuenta con ventas marcadas "📦 De inventario" — son perecederas
+//     y el sobrante sin vender se cuenta como merma de inmediato.
+//  2) Compras de inventario (esEntradaInventario): cualquier venta posterior
+//     del mismo producto las descuenta SOLA, mientras no hayan caducado.
+// Todo se descuenta del lote más viejo al más nuevo (FIFO).
 function calcularInventario(datos) {
+  var hoy = new Date().toISOString().slice(0,10);
+  datos.forEach(function(r){ delete r._deInventario; });
+  var lotes = [];
+
+  // 2) Compras de inventario
+  datos.filter(esEntradaInventario).forEach(function(r){
+    var f = fmtFecha(r[6]), k = claveInventario(r);
+    var costo = filasVentaSinOrigen(r).reduce(function(t,fv){ return t + (fv.costo || 0); }, 0);
+    var meses = CADUCIDAD_INVENTARIO_MESES[k.tipo];
+    lotes.push({ fecha:f, clave:k.clave, nombre:k.clave, emoji:"📦", sobrante:k.unidades, costoUnidad: k.unidades > 0 ? costo / k.unidades : 0,
+                 vence: meses != null ? sumarMeses(f, meses) : null, perecedero:false, vendidos:[] });
+  });
+  lotes.sort(function(a,b){ return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; });
+
+  var ventas = datos.filter(function(r){ return !esEntradaInventario(r) && fmtFecha(r[6]) !== "Sin fecha"; })
+                    .map(function(r,i){ return { r:r, i:i, fecha:fmtFecha(r[6]) }; })
+                    .sort(function(a,b){ return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.i - b.i; });
+  function disponible(l){ return l.sobrante - l.vendidos.reduce(function(t,v){ return t+v.unidades; }, 0); }
+
+  // Venta de un producto no-berry: se surte de inventario si alcanza completa
+  var sinLote = [];
+  ventas.forEach(function(v){
+    var k = claveInventario(v.r);
+    var candidatos = lotes.filter(function(l){ return l.clave === k.clave && l.fecha <= v.fecha && (!l.vence || v.fecha <= l.vence); });
+    var hay = candidatos.reduce(function(t,l){ return t + disponible(l); }, 0);
+    if (!candidatos.length || hay < k.unidades) return;
+    var faltan = k.unidades;
+    candidatos.forEach(function(l){
+      var toma = Math.min(disponible(l), faltan);
+      if (toma > 0) { l.vendidos.push({ fecha:v.fecha, cliente:v.r[2]||"?", unidades:toma }); faltan -= toma; }
+    });
+    v.r._deInventario = true;
+  });
+
+  // 1) Berries: sobrante del redondeo a bote de cada fecha
   var porFecha = {};
   datos.forEach(function(r){ var f=fmtFecha(r[6]); if (f!=="Sin fecha") (porFecha[f]=porFecha[f]||[]).push(r); });
-  // Entradas: sobrante de cada fecha, por fruta
-  var lotes = [];
+  var lotesBerry = [];
   Object.keys(porFecha).sort().forEach(function(f){
     var B = calcularCompraProveedor(porFecha[f], f).berries;
     Object.keys(B).sort().forEach(function(fn){
       var b = B[fn];
       if (b.mermaGramos > 0 && !b.esPorClamshell && !b.esPorKg) {
-        lotes.push({ fecha:f, fruta:fn, sobrante:b.mermaGramos, costoClamshell:b.costoUnitario/CAJAS_POR_BOTE, vendidos:[] });
+        lotesBerry.push({ fecha:f, clave:"berry:"+fn, nombre:fn, emoji:emojiDeFruta(fn), sobrante:b.mermaGramos, costoUnidad:b.costoUnitario/CAJAS_POR_BOTE, vence:null, perecedero:true, vendidos:[] });
       }
     });
   });
-  // Salidas: ventas marcadas "De inventario", en clamshells por fruta
-  var salidas = [];
-  datos.filter(esDeInventario).forEach(function(r){
-    filasVentaSinOrigen(r).forEach(function(fv){
-      if (!isBerry(fv.fruta)) return;
-      salidas.push({ fecha:fmtFecha(r[6]), fruta:fv.fruta, clamshells: fv.cajas != null ? fv.cajas : fv.cantidad, cliente:r[2]||"?" });
+  // Ventas marcadas a mano "De inventario" (columna O) — berries y cualquier
+  // producto que no se haya surtido ya automáticamente arriba
+  ventas.forEach(function(v){
+    if (String(v.r[14] || "").trim() !== "Inventario" || v.r._deInventario) return;
+    filasVentaSinOrigen(v.r).forEach(function(fv){
+      if (!isBerry(fv.fruta)) {
+        sinLote.push({ fecha:v.fecha, nombre:v.r[0], cliente:v.r[2]||"?", unidades:fv.cantidad });
+        return;
+      }
+      var faltan = fv.cajas != null ? fv.cajas : fv.cantidad;
+      lotesBerry.forEach(function(l){
+        if (faltan <= 0 || l.clave !== "berry:"+fv.fruta || l.fecha > v.fecha) return;
+        var toma = Math.min(disponible(l), faltan);
+        if (toma > 0) { l.vendidos.push({ fecha:v.fecha, cliente:v.r[2]||"?", unidades:toma }); faltan -= toma; }
+      });
+      if (faltan > 0) sinLote.push({ fecha:v.fecha, nombre:fv.fruta, cliente:v.r[2]||"?", unidades:faltan });
     });
   });
-  salidas.sort(function(a,b){ return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; });
-  var sinLote = []; // ventas de inventario sin sobrante previo que las cubra
-  salidas.forEach(function(s){
-    var faltan = s.clamshells;
-    lotes.forEach(function(l){
-      if (faltan <= 0 || l.fruta !== s.fruta || l.fecha > s.fecha) return;
-      var usados = l.vendidos.reduce(function(t,v){ return t+v.clamshells; }, 0);
-      var toma = Math.min(l.sobrante - usados, faltan);
-      if (toma > 0) { l.vendidos.push({ fecha:s.fecha, cliente:s.cliente, clamshells:toma }); faltan -= toma; }
-    });
-    if (faltan > 0) sinLote.push({ fecha:s.fecha, fruta:s.fruta, cliente:s.cliente, clamshells:faltan });
+
+  var todos = lotes.concat(lotesBerry);
+  todos.forEach(function(l){
+    l.vendidosTotal = l.sobrante - disponible(l);
+    l.restante = disponible(l);
+    l.costoRestante = l.restante * l.costoUnidad;
+    // Berries sin vender = merma de inmediato; lo demás, solo si ya caducó
+    l.esMerma = l.restante > 0 && (l.perecedero || (l.vence != null && hoy > l.vence));
   });
-  lotes.forEach(function(l){
-    l.vendidosTotal = l.vendidos.reduce(function(t,v){ return t+v.clamshells; }, 0);
-    l.restante = l.sobrante - l.vendidosTotal;
-    l.costoRestante = l.restante * l.costoClamshell;
-  });
-  return { lotes: lotes, sinLote: sinLote };
+  return { lotes: todos, sinLote: sinLote, hoy: hoy };
 }
 
 function renderInventario() {
   var inv = calcularInventario(inventarioData);
-  var lotes = inv.lotes.slice().reverse(); // más reciente arriba
+  // Agrupa lotes idénticos (ej. 7 bolsas de Jamaica capturadas en 7 filas)
+  var grupos = {};
+  inv.lotes.forEach(function(l){
+    var g = l.fecha + "||" + l.clave + "||" + l.vence + "||" + l.esMerma;
+    if (!grupos[g]) grupos[g] = { fecha:l.fecha, nombre:l.nombre, emoji:l.emoji, vence:l.vence, esMerma:l.esMerma, sobrante:0, vendidosTotal:0, restante:0, costoRestante:0, vendidos:[] };
+    var x = grupos[g];
+    x.sobrante += l.sobrante; x.vendidosTotal += l.vendidosTotal; x.restante += l.restante; x.costoRestante += l.costoRestante;
+    x.vendidos = x.vendidos.concat(l.vendidos);
+    x.esMerma = x.esMerma || l.esMerma;
+  });
+  var lotes = Object.values(grupos).sort(function(a,b){ return a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0; }); // más reciente arriba
   var tot = lotes.reduce(function(t,l){
-    t.sobrante += l.sobrante; t.vendidos += l.vendidosTotal; t.restante += l.restante;
-    t.costoSobrante += l.sobrante * l.costoClamshell; t.costoRestante += l.costoRestante;
+    t.vendidos += l.vendidosTotal;
+    if (l.esMerma) { t.merma += l.restante; t.costoMerma += l.costoRestante; }
+    else { t.disp += l.restante; t.costoDisp += l.costoRestante; }
     return t;
-  }, { sobrante:0, vendidos:0, restante:0, costoSobrante:0, costoRestante:0 });
+  }, { vendidos:0, merma:0, costoMerma:0, disp:0, costoDisp:0 });
 
   var html =
     '<div class="kpi-grid">'+
-      '<div class="kpi-card"><div class="kpi-label">CLAMSHELLS SOBRANTES</div><div class="kpi-val">'+tot.sobrante+'</div><div class="kpi-mini-label" style="margin-top:4px">costo $'+fmtMoney(tot.costoSobrante)+'</div></div>'+
-      '<div class="kpi-card"><div class="kpi-label">VENDIDOS DESPUÉS</div><div class="kpi-val">'+tot.vendidos+'</div><div class="kpi-mini-label" style="margin-top:4px">marcados 📦 De inventario</div></div>'+
-      '<div class="kpi-card"><div class="kpi-label">SIN VENDER (MERMA)</div><div class="kpi-val naranja">'+tot.restante+'</div><div class="kpi-mini-label" style="margin-top:4px">clamshells</div></div>'+
-      '<div class="kpi-card"><div class="kpi-label">COSTO DE MERMA</div><div class="kpi-val rojo">$'+fmtMoney(tot.costoRestante)+'</div><div class="kpi-mini-label" style="margin-top:4px">ya pagado al proveedor</div></div>'+
+      '<div class="kpi-card"><div class="kpi-label">DISPONIBLE PARA VENDER</div><div class="kpi-val">'+tot.disp+'</div><div class="kpi-mini-label" style="margin-top:4px">costo $'+fmtMoney(tot.costoDisp)+' · ya pagado</div></div>'+
+      '<div class="kpi-card"><div class="kpi-label">VENDIDOS DE INVENTARIO</div><div class="kpi-val">'+tot.vendidos+'</div><div class="kpi-mini-label" style="margin-top:4px">no se volvieron a pedir</div></div>'+
+      '<div class="kpi-card"><div class="kpi-label">MERMA</div><div class="kpi-val naranja">'+tot.merma+'</div><div class="kpi-mini-label" style="margin-top:4px">sin vender / caducado</div></div>'+
+      '<div class="kpi-card"><div class="kpi-label">COSTO DE MERMA</div><div class="kpi-val rojo">$'+fmtMoney(tot.costoMerma)+'</div><div class="kpi-mini-label" style="margin-top:4px">ya pagado al proveedor</div></div>'+
     '</div>';
 
   if (!lotes.length) {
-    html += "<p style='text-align:center;color:#5a8a5a;padding:40px'>✅ No hay sobrantes de berries</p>";
+    html += "<p style='text-align:center;color:#5a8a5a;padding:40px'>✅ No hay inventario</p>";
   } else {
-    html += '<div class="kpi-block" style="margin-top:14px"><div class="kpi-label">SOBRANTE POR FECHA DE COMPRA</div>'+
-      '<table class="cliente-table"><thead><tr><th>FECHA</th><th>FRUTA</th><th>SOBRÓ</th><th>VENDIDO</th><th>QUEDA</th><th>COSTO MERMA</th></tr></thead><tbody>'+
+    html += '<div class="kpi-block" style="margin-top:14px"><div class="kpi-label">INVENTARIO POR FECHA DE COMPRA</div>'+
+      '<table class="cliente-table"><thead><tr><th>FECHA</th><th>PRODUCTO</th><th>ENTRÓ</th><th>VENDIDO</th><th>QUEDA</th><th>ESTADO</th><th>COSTO</th></tr></thead><tbody>'+
       lotes.map(function(l){
-        var det = l.vendidos.map(function(v){ return v.clamshells+' → '+v.cliente+' ('+fmtFechaCorta(v.fecha)+')'; }).join('<br>');
-        return '<tr><td>'+fmtFechaCorta(l.fecha)+'</td><td>'+emojiDeFruta(l.fruta)+' '+l.fruta+'</td><td>'+l.sobrante+'</td>'+
+        var det = l.vendidos.map(function(v){ return v.unidades+' → '+v.cliente+' ('+fmtFechaCorta(v.fecha)+')'; }).join('<br>');
+        var estado;
+        if (l.restante === 0) estado = '<span class="merma-pill merma-ok">Vendido</span>';
+        else if (l.esMerma) estado = '<span class="merma-pill merma-warn">Merma'+(l.vence?' · caducó '+fmtFechaCorta(l.vence):'')+'</span>';
+        else if (l.vence) estado = '<span class="merma-pill merma-ok">Vence '+fmtFechaCorta(l.vence)+'</span>';
+        else estado = '<span class="merma-pill merma-ok">Sin caducidad</span>';
+        return '<tr><td>'+fmtFechaCorta(l.fecha)+'</td><td>'+l.emoji+' '+l.nombre+'</td><td>'+l.sobrante+'</td>'+
           '<td>'+l.vendidosTotal+(det?'<div style="font-size:10px;color:#6b9e6b">'+det+'</div>':'')+'</td>'+
-          '<td>'+(l.restante>0?'<span class="merma-pill merma-warn">'+l.restante+'</span>':'<span class="merma-pill merma-ok">0</span>')+'</td>'+
+          '<td>'+l.restante+'</td><td>'+estado+'</td>'+
           '<td>$'+fmtMoney(l.costoRestante)+'</td></tr>';
       }).join('')+
       '</tbody></table></div>';
   }
   if (inv.sinLote.length) {
-    html += '<div class="kpi-block" style="margin-top:14px"><div class="kpi-label">⚠️ VENTAS "DE INVENTARIO" SIN SOBRANTE PREVIO DE ESA FRUTA</div>'+
-      inv.sinLote.map(function(s){ return '<div class="pedido-line"><span class="pedido-fruta">'+fmtFechaCorta(s.fecha)+' · '+s.fruta+' · '+s.cliente+'</span><span class="pedido-cant">'+s.clamshells+' clamshell'+(s.clamshells!==1?'s':'')+'</span></div>'; }).join('')+
+    html += '<div class="kpi-block" style="margin-top:14px"><div class="kpi-label">⚠️ MARCADAS "DE INVENTARIO" SIN INVENTARIO PREVIO QUE LAS CUBRA</div>'+
+      inv.sinLote.map(function(s){ return '<div class="pedido-line"><span class="pedido-fruta">'+fmtFechaCorta(s.fecha)+' · '+s.nombre+' · '+s.cliente+'</span><span class="pedido-cant">'+s.unidades+'</span></div>'; }).join('')+
       '</div>';
   }
-  html += '<p style="color:#5a8a5a;font-size:11px;text-align:center;margin-top:14px">Los sobrantes salen solos del redondeo a botes de 3. Al vender uno, captura el pedido con el nombre del cliente y marca "📦 De inventario".</p>';
+  html += '<p style="color:#5a8a5a;font-size:11px;text-align:center;margin-top:14px">Berries: el sobrante del redondeo a botes de 3 entra solo; para venderlo otro día marca "📦 De inventario". Pulpas, Jamaica y chile capturados con dirección INVENTARIO se descuentan solos cuando alguien los pide (pulpas: caducan 1 mes después de la compra).</p>';
   document.getElementById("inventarioContent").innerHTML = html;
 }
 
@@ -2070,6 +2163,7 @@ async function cargarProveedor() {
     var res=await fetch(SCRIPT_URL+"?action=read");
     var data=await res.json();
     proveedorData=(data.rows||[]).slice(1).filter(function(r){return r[0]&&r[2];});
+    calcularInventario(proveedorData); // marca ventas surtidas automáticamente con inventario (ver esDeInventario)
     var input=document.getElementById("fechaFiltroP");
     if (!input.value) {
       var fechas=fechasValidas(proveedorData);

@@ -2097,8 +2097,10 @@ function calcularInventario(datos) {
     l.vendidosTotal = l.sobrante - disponible(l);
     l.restante = disponible(l);
     l.costoRestante = l.restante * l.costoUnidad;
+    // Entrega futura: el sobrante es proyectado — aún no se compra ni se paga
+    l.futuro = l.fecha > hoy;
     // Berries sin vender = merma de inmediato; lo demás, solo si ya caducó
-    l.esMerma = l.restante > 0 && (l.perecedero || (l.vence != null && hoy > l.vence));
+    l.esMerma = !l.futuro && l.restante > 0 && (l.perecedero || (l.vence != null && hoy > l.vence));
   });
   return { lotes: todos, sinLote: sinLote, hoy: hoy };
 }
@@ -2109,7 +2111,7 @@ function renderInventario() {
   var grupos = {};
   inv.lotes.forEach(function(l){
     var g = l.fecha + "||" + l.clave + "||" + l.vence + "||" + l.esMerma;
-    if (!grupos[g]) grupos[g] = { fecha:l.fecha, nombre:l.nombre, emoji:l.emoji, vence:l.vence, esMerma:l.esMerma, sobrante:0, vendidosTotal:0, restante:0, costoRestante:0, vendidos:[] };
+    if (!grupos[g]) grupos[g] = { fecha:l.fecha, nombre:l.nombre, emoji:l.emoji, vence:l.vence, esMerma:l.esMerma, futuro:l.futuro, sobrante:0, vendidosTotal:0, restante:0, costoRestante:0, vendidos:[] };
     var x = grupos[g];
     x.sobrante += l.sobrante; x.vendidosTotal += l.vendidosTotal; x.restante += l.restante; x.costoRestante += l.costoRestante;
     x.vendidos = x.vendidos.concat(l.vendidos);
@@ -2117,18 +2119,22 @@ function renderInventario() {
   });
   var lotes = Object.values(grupos).sort(function(a,b){ return a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0; }); // más reciente arriba
   var tot = lotes.reduce(function(t,l){
+    if (l.futuro) { t.proy += l.restante; t.costoProy += l.costoRestante; return t; }
     t.vendidos += l.vendidosTotal;
     if (l.esMerma) { t.merma += l.restante; t.costoMerma += l.costoRestante; }
     else { t.disp += l.restante; t.costoDisp += l.costoRestante; }
     return t;
-  }, { vendidos:0, merma:0, costoMerma:0, disp:0, costoDisp:0 });
+  }, { vendidos:0, merma:0, costoMerma:0, disp:0, costoDisp:0, proy:0, costoProy:0 });
+  var costoPagado = tot.costoDisp + tot.costoMerma; // lo que sigue en inventario o se perdió, ya pagado
 
   var html =
+    '<div class="kpi-card" style="margin-bottom:12px"><div class="kpi-label">TOTAL PAGADO EN INVENTARIO</div><div class="kpi-val">$'+fmtMoney(costoPagado)+'</div>'+
+      '<div class="kpi-mini-label" style="margin-top:4px">= disponible $'+fmtMoney(tot.costoDisp)+' + merma $'+fmtMoney(tot.costoMerma)+'</div></div>'+
     '<div class="kpi-grid">'+
       '<div class="kpi-card"><div class="kpi-label">DISPONIBLE PARA VENDER</div><div class="kpi-val">'+tot.disp+'</div><div class="kpi-mini-label" style="margin-top:4px">costo $'+fmtMoney(tot.costoDisp)+' · ya pagado</div></div>'+
       '<div class="kpi-card"><div class="kpi-label">VENDIDOS DE INVENTARIO</div><div class="kpi-val">'+tot.vendidos+'</div><div class="kpi-mini-label" style="margin-top:4px">no se volvieron a pedir</div></div>'+
       '<div class="kpi-card"><div class="kpi-label">MERMA</div><div class="kpi-val naranja">'+tot.merma+'</div><div class="kpi-mini-label" style="margin-top:4px">sin vender / caducado</div></div>'+
-      '<div class="kpi-card"><div class="kpi-label">COSTO DE MERMA</div><div class="kpi-val rojo">$'+fmtMoney(tot.costoMerma)+'</div><div class="kpi-mini-label" style="margin-top:4px">ya pagado al proveedor</div></div>'+
+      '<div class="kpi-card"><div class="kpi-label">COSTO DE MERMA</div><div class="kpi-val rojo">$'+fmtMoney(tot.costoMerma)+'</div><div class="kpi-mini-label" style="margin-top:4px">perdido — ya pagado</div></div>'+
     '</div>';
 
   if (!lotes.length) {
@@ -2140,15 +2146,19 @@ function renderInventario() {
         var det = l.vendidos.map(function(v){ return v.unidades+' → '+v.cliente+' ('+fmtFechaCorta(v.fecha)+')'; }).join('<br>');
         var estado;
         if (l.restante === 0) estado = '<span class="merma-pill merma-ok">Vendido</span>';
+        else if (l.futuro) estado = '<span class="merma-pill" style="background:rgba(255,255,255,0.08);color:#9fbf9f">Sobrará · aún no se compra</span>';
         else if (l.esMerma) estado = '<span class="merma-pill merma-warn">Merma'+(l.vence?' · caducó '+fmtFechaCorta(l.vence):'')+'</span>';
         else if (l.vence) estado = '<span class="merma-pill merma-ok">Vence '+fmtFechaCorta(l.vence)+'</span>';
         else estado = '<span class="merma-pill merma-ok">Sin caducidad</span>';
         return '<tr><td>'+fmtFechaCorta(l.fecha)+'</td><td>'+l.emoji+' '+l.nombre+'</td><td>'+l.sobrante+'</td>'+
           '<td>'+l.vendidosTotal+(det?'<div style="font-size:10px;color:#6b9e6b">'+det+'</div>':'')+'</td>'+
           '<td>'+l.restante+'</td><td>'+estado+'</td>'+
-          '<td>$'+fmtMoney(l.costoRestante)+'</td></tr>';
+          '<td>'+(l.futuro?'<span style="color:#6b9e6b">($'+fmtMoney(l.costoRestante)+')</span>':'$'+fmtMoney(l.costoRestante))+'</td></tr>';
       }).join('')+
-      '</tbody></table></div>';
+      '<tr style="font-weight:bold"><td colspan="6">TOTAL PAGADO</td><td>$'+fmtMoney(costoPagado)+'</td></tr>'+
+      '</tbody></table>'+
+      (tot.proy ? '<div class="kpi-mini-label" style="margin-top:8px">Entre paréntesis: sobrante proyectado de entregas futuras ('+tot.proy+' por $'+fmtMoney(tot.costoProy)+'), no suma al total porque aún no se paga.</div>' : '')+
+      '</div>';
   }
   if (inv.sinLote.length) {
     html += '<div class="kpi-block" style="margin-top:14px"><div class="kpi-label">⚠️ MARCADAS "DE INVENTARIO" SIN INVENTARIO PREVIO QUE LAS CUBRA</div>'+

@@ -1991,6 +1991,10 @@ async function cargarInventario() {
 var CADUCIDAD_INVENTARIO_MESES = { pulpa: 1 }; // pulpas en congelador
 // Nombres viejos → nombre actual, para que una venta con el nombre nuevo
 // descuente un lote capturado con el viejo.
+// El descuento automático solo aplica a entregas desde esta fecha: las ventas
+// anteriores (ej. Luz 5-sep, Guanábana + chile seco) se surtieron con compra
+// nueva, confirmado por el usuario — no deben tocar el inventario.
+var INICIO_DESCUENTO_AUTO = "2026-09-25";
 var ALIAS_INVENTARIO = { "Bolsa Chile árbol 250 gr": "Chile de árbol seco (rojo) 250 gr" };
 
 function esEntradaInventario(r) { return String(r[11] || "").trim().toUpperCase() === "INVENTARIO"; }
@@ -2043,6 +2047,7 @@ function calcularInventario(datos) {
   // Venta de un producto no-berry: se surte de inventario si alcanza completa
   var sinLote = [];
   ventas.forEach(function(v){
+    if (v.fecha < INICIO_DESCUENTO_AUTO) return;
     var k = claveInventario(v.r);
     var candidatos = lotes.filter(function(l){ return l.clave === k.clave && l.fecha <= v.fecha && (!l.vence || v.fecha <= l.vence); });
     var hay = candidatos.reduce(function(t,l){ return t + disponible(l); }, 0);

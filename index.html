@@ -92,6 +92,14 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
       <div id="familiarBanner" style="display:none;margin-top:8px" class="familiar-active-banner">🤝 Precios a costo de proveedor</div>
     </div>
     <div>
+      <label>ORIGEN DEL PRODUCTO</label>
+      <div class="ubi-toggle">
+        <button class="ubi-btn active" id="origenNuevoBtn">🛒 Compra nueva</button>
+        <button class="ubi-btn" id="origenInventarioBtn">📦 De inventario</button>
+      </div>
+      <div id="inventarioBanner" style="display:none;margin-top:8px" class="familiar-active-banner">📦 Se surte con clamshells que sobraron — no se pide al proveedor</div>
+    </div>
+    <div>
       <label>PRODUCTOS</label>
       <div id="productos"></div>
       <button class="add-btn" id="addBtn">+ Agregar producto</button>
@@ -280,6 +288,19 @@ document.getElementById("ubiSereno").addEventListener("click",       function(){
 document.getElementById("ubiGeneral").addEventListener("click",      function(){ setUbi("General"); });
 document.getElementById("precioNormalBtn").addEventListener("click",  function(){ setPrecioFamiliar(false); });
 document.getElementById("precioFamiliarBtn").addEventListener("click",function(){ setPrecioFamiliar(true); });
+
+// "📦 De inventario": el pedido se surte con clamshells que sobraron de una
+// compra anterior. Se guarda en la columna O como "Inventario" — panel.html
+// lo descuenta de la pestaña Inventario y no lo pide al proveedor.
+var deInventario = false;
+function setOrigenInventario(f) {
+  deInventario = f;
+  document.getElementById("origenNuevoBtn").classList.toggle("active", !f);
+  document.getElementById("origenInventarioBtn").classList.toggle("active", f);
+  document.getElementById("inventarioBanner").style.display = f ? "block" : "none";
+}
+document.getElementById("origenNuevoBtn").addEventListener("click",      function(){ setOrigenInventario(false); });
+document.getElementById("origenInventarioBtn").addEventListener("click", function(){ setOrigenInventario(true); });
 
 function setUbi(u) {
   ubicacion = u;
@@ -564,7 +585,8 @@ async function guardar() {
       var precio=precioUnitario(cat, it);
       var v=precio*it.cantidad; var s=calcularCostoLinea(cat, it);
       var tipo=precioFamiliar?"Familia":"Cliente";
-      return [nombre,it.cantidad,cliente,precio,v,"Pendiente",fecha,s,s,v-s,ubicacion,direccion,horaEntrega,tipo];
+      var origen=deInventario?"Inventario":"";
+      return [nombre,it.cantidad,cliente,precio,v,"Pendiente",fecha,s,s,v-s,ubicacion,direccion,horaEntrega,tipo,origen];
     });
     await fetch(SCRIPT_URL+"?data="+encodeURIComponent(JSON.stringify(filas)),{mode:"no-cors"});
     var total=items.reduce(function(s,it){return s+calcularPrecioLinea(getCat(it.catId),it);},0);

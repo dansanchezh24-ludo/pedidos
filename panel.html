@@ -126,7 +126,7 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
 <div class="header">
   <div style="font-size:36px;margin-bottom:4px">🫐</div>
   <h1>Panel</h1>
-  <p>CATÁLOGO · TABLERO · RESUMEN · PROVEEDOR</p>
+  <p>CATÁLOGO · TABLERO · RESUMEN · PROVEEDOR · INVENTARIO</p>
 </div>
 
 <div class="tabs">
@@ -134,6 +134,7 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
   <button class="tab active" id="tabTablero">📈 Tablero</button>
   <button class="tab" id="tabResumen">📊 Resumen</button>
   <button class="tab" id="tabProveedor">🛒 Proveedor</button>
+  <button class="tab" id="tabInventario">📦 Inventario</button>
 </div>
 
 <div class="content">
@@ -192,6 +193,12 @@ input, select { width:100%; background:rgba(255,255,255,0.06); border:1px solid 
     <button class="refresh-btn" id="refreshBtnP">↻ Actualizar</button>
     <div id="proveedorResumen"></div>
   </div>
+
+  <!-- ══ INVENTARIO (sobrantes de berries) ══ -->
+  <div id="inventario" class="view">
+    <button class="refresh-btn" id="refreshBtnI">↻ Actualizar</button>
+    <div id="inventarioContent"></div>
+  </div>
 </div>
 
 <script>
@@ -224,6 +231,8 @@ document.getElementById("tabCatalogo").addEventListener("click", function(){ swi
 document.getElementById("tabTablero").addEventListener("click",  function(){ switchTab("tablero"); });
 document.getElementById("tabResumen").addEventListener("click",  function(){ switchTab("resumen"); });
 document.getElementById("tabProveedor").addEventListener("click", function(){ switchTab("proveedor"); });
+document.getElementById("tabInventario").addEventListener("click", function(){ switchTab("inventario"); });
+document.getElementById("refreshBtnI").addEventListener("click", cargarInventario);
 
 document.getElementById("refreshBtnK").addEventListener("click", cargarTablero);
 document.getElementById("kpiDesde").addEventListener("change", renderTablero);
@@ -254,7 +263,16 @@ function switchTab(tab) {
   if (tab==="tablero")   cargarTablero();
   if (tab==="resumen")   cargarResumen();
   if (tab==="proveedor") cargarProveedor();
+  if (tab==="inventario") cargarInventario();
 }
+
+// Columna O (índice 14) del Sheet: "Inventario" = esta venta se surtió con
+// clamshells que SOBRARON de una compra anterior (ver pestaña Inventario), no
+// con producto comprado para esa fecha. Se marca con el toggle "📦 De
+// inventario" de index.html. Cuenta como venta normal (Tablero/Resumen), pero
+// NO se le vuelve a pedir al proveedor y su costo es $0 — ya se pagó (y ya se
+// cargó como merma) en la fecha en que se compró el bote original.
+function esDeInventario(r) { return String(r[14] || "").trim() === "Inventario"; }
 
 function fmtFecha(f) {
   if (!f) return "Sin fecha";
@@ -540,6 +558,12 @@ function esNombreFamiliar(nombreComercial) {
 //          tramo de costo en el detalle de ventas, como referencia de en qué
 //          meses del año aplicó cada costo.
 function filasVenta(r) {
+  var filas = filasVentaSinOrigen(r);
+  if (esDeInventario(r)) filas.forEach(function(f){ f.costo = 0; }); // ver esDeInventario
+  return filas;
+}
+
+function filasVentaSinOrigen(r) {
   var nombreRaw = r[0] || "";
   var qty = parseFloat(r[1]) || 1;
   var precioU = parseFloat(r[3]) || 0;
@@ -1932,6 +1956,112 @@ function renombrarCliente(clienteActual, fecha, clienteNuevo) {
 }
 
 // ═══════════════════════════════════════════
+// INVENTARIO — clamshells de berries que sobraron sin vender
+// ═══════════════════════════════════════════
+// No se captura a mano: el sobrante de cada fecha es el redondeo a bote que
+// ya calcula calcularCompraProveedor (mermaGramos = botes×3 − clamshells
+// vendidos). Todo clamshell al que no se le asignó cliente ese día entra aquí.
+// Las ventas posteriores marcadas "📦 De inventario" (esDeInventario) lo van
+// descontando, del lote más viejo al más nuevo (FIFO) y solo contra lotes de
+// la misma fecha o anteriores. Lo que queda sin vender es merma: su costo ya
+// se pagó al proveedor ese día.
+var inventarioData = [];
+
+async function cargarInventario() {
+  document.getElementById("inventarioContent").innerHTML="<p style='text-align:center;color:#6b9e6b;padding:30px'>⏳ Cargando inventario...</p>";
+  try {
+    var res=await fetch(SCRIPT_URL+"?action=read");
+    var data=await res.json();
+    inventarioData=(data.rows||[]).slice(1).filter(function(r){return r[0]&&r[2];});
+    renderInventario();
+  } catch(e) {
+    document.getElementById("inventarioContent").innerHTML="<p style='color:#ff8a80;text-align:center;padding:20px'>"+e.message+"</p>";
+  }
+}
+
+function calcularInventario(datos) {
+  var porFecha = {};
+  datos.forEach(function(r){ var f=fmtFecha(r[6]); if (f!=="Sin fecha") (porFecha[f]=porFecha[f]||[]).push(r); });
+  // Entradas: sobrante de cada fecha, por fruta
+  var lotes = [];
+  Object.keys(porFecha).sort().forEach(function(f){
+    var B = calcularCompraProveedor(porFecha[f], f).berries;
+    Object.keys(B).sort().forEach(function(fn){
+      var b = B[fn];
+      if (b.mermaGramos > 0 && !b.esPorClamshell && !b.esPorKg) {
+        lotes.push({ fecha:f, fruta:fn, sobrante:b.mermaGramos, costoClamshell:b.costoUnitario/CAJAS_POR_BOTE, vendidos:[] });
+      }
+    });
+  });
+  // Salidas: ventas marcadas "De inventario", en clamshells por fruta
+  var salidas = [];
+  datos.filter(esDeInventario).forEach(function(r){
+    filasVentaSinOrigen(r).forEach(function(fv){
+      if (!isBerry(fv.fruta)) return;
+      salidas.push({ fecha:fmtFecha(r[6]), fruta:fv.fruta, clamshells: fv.cajas != null ? fv.cajas : fv.cantidad, cliente:r[2]||"?" });
+    });
+  });
+  salidas.sort(function(a,b){ return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; });
+  var sinLote = []; // ventas de inventario sin sobrante previo que las cubra
+  salidas.forEach(function(s){
+    var faltan = s.clamshells;
+    lotes.forEach(function(l){
+      if (faltan <= 0 || l.fruta !== s.fruta || l.fecha > s.fecha) return;
+      var usados = l.vendidos.reduce(function(t,v){ return t+v.clamshells; }, 0);
+      var toma = Math.min(l.sobrante - usados, faltan);
+      if (toma > 0) { l.vendidos.push({ fecha:s.fecha, cliente:s.cliente, clamshells:toma }); faltan -= toma; }
+    });
+    if (faltan > 0) sinLote.push({ fecha:s.fecha, fruta:s.fruta, cliente:s.cliente, clamshells:faltan });
+  });
+  lotes.forEach(function(l){
+    l.vendidosTotal = l.vendidos.reduce(function(t,v){ return t+v.clamshells; }, 0);
+    l.restante = l.sobrante - l.vendidosTotal;
+    l.costoRestante = l.restante * l.costoClamshell;
+  });
+  return { lotes: lotes, sinLote: sinLote };
+}
+
+function renderInventario() {
+  var inv = calcularInventario(inventarioData);
+  var lotes = inv.lotes.slice().reverse(); // más reciente arriba
+  var tot = lotes.reduce(function(t,l){
+    t.sobrante += l.sobrante; t.vendidos += l.vendidosTotal; t.restante += l.restante;
+    t.costoSobrante += l.sobrante * l.costoClamshell; t.costoRestante += l.costoRestante;
+    return t;
+  }, { sobrante:0, vendidos:0, restante:0, costoSobrante:0, costoRestante:0 });
+
+  var html =
+    '<div class="kpi-grid">'+
+      '<div class="kpi-card"><div class="kpi-label">CLAMSHELLS SOBRANTES</div><div class="kpi-val">'+tot.sobrante+'</div><div class="kpi-mini-label" style="margin-top:4px">costo $'+fmtMoney(tot.costoSobrante)+'</div></div>'+
+      '<div class="kpi-card"><div class="kpi-label">VENDIDOS DESPUÉS</div><div class="kpi-val">'+tot.vendidos+'</div><div class="kpi-mini-label" style="margin-top:4px">marcados 📦 De inventario</div></div>'+
+      '<div class="kpi-card"><div class="kpi-label">SIN VENDER (MERMA)</div><div class="kpi-val naranja">'+tot.restante+'</div><div class="kpi-mini-label" style="margin-top:4px">clamshells</div></div>'+
+      '<div class="kpi-card"><div class="kpi-label">COSTO DE MERMA</div><div class="kpi-val rojo">$'+fmtMoney(tot.costoRestante)+'</div><div class="kpi-mini-label" style="margin-top:4px">ya pagado al proveedor</div></div>'+
+    '</div>';
+
+  if (!lotes.length) {
+    html += "<p style='text-align:center;color:#5a8a5a;padding:40px'>✅ No hay sobrantes de berries</p>";
+  } else {
+    html += '<div class="kpi-block" style="margin-top:14px"><div class="kpi-label">SOBRANTE POR FECHA DE COMPRA</div>'+
+      '<table class="cliente-table"><thead><tr><th>FECHA</th><th>FRUTA</th><th>SOBRÓ</th><th>VENDIDO</th><th>QUEDA</th><th>COSTO MERMA</th></tr></thead><tbody>'+
+      lotes.map(function(l){
+        var det = l.vendidos.map(function(v){ return v.clamshells+' → '+v.cliente+' ('+fmtFechaCorta(v.fecha)+')'; }).join('<br>');
+        return '<tr><td>'+fmtFechaCorta(l.fecha)+'</td><td>'+emojiDeFruta(l.fruta)+' '+l.fruta+'</td><td>'+l.sobrante+'</td>'+
+          '<td>'+l.vendidosTotal+(det?'<div style="font-size:10px;color:#6b9e6b">'+det+'</div>':'')+'</td>'+
+          '<td>'+(l.restante>0?'<span class="merma-pill merma-warn">'+l.restante+'</span>':'<span class="merma-pill merma-ok">0</span>')+'</td>'+
+          '<td>$'+fmtMoney(l.costoRestante)+'</td></tr>';
+      }).join('')+
+      '</tbody></table></div>';
+  }
+  if (inv.sinLote.length) {
+    html += '<div class="kpi-block" style="margin-top:14px"><div class="kpi-label">⚠️ VENTAS "DE INVENTARIO" SIN SOBRANTE PREVIO DE ESA FRUTA</div>'+
+      inv.sinLote.map(function(s){ return '<div class="pedido-line"><span class="pedido-fruta">'+fmtFechaCorta(s.fecha)+' · '+s.fruta+' · '+s.cliente+'</span><span class="pedido-cant">'+s.clamshells+' clamshell'+(s.clamshells!==1?'s':'')+'</span></div>'; }).join('')+
+      '</div>';
+  }
+  html += '<p style="color:#5a8a5a;font-size:11px;text-align:center;margin-top:14px">Los sobrantes salen solos del redondeo a botes de 3. Al vender uno, captura el pedido con el nombre del cliente y marca "📦 De inventario".</p>';
+  document.getElementById("inventarioContent").innerHTML = html;
+}
+
+// ═══════════════════════════════════════════
 // PROVEEDOR — pedido a proveedor por fecha
 // ═══════════════════════════════════════════
 async function cargarProveedor() {
@@ -2071,6 +2201,7 @@ function calcularCompraProveedor(datos, fecha) {
   var huevos = {};
   var pulpas = {};
   var otros = {}; // cualquier producto que no encaje en las categorías de arriba
+  var deInventario = []; // ventas surtidas con sobrante de otra fecha (ver esDeInventario)
   var ventaTotal = 0;
 
   datos.forEach(function(r) {
@@ -2080,6 +2211,8 @@ function calcularCompraProveedor(datos, fecha) {
     var precioU   = parseFloat(r[3]) || 0;
     var costoFila = parseFloat(r[7]) || 0; // Subtotal costo, ya calculado al capturar el pedido
     ventaTotal   += precioU * qty;
+    // Salió del inventario: cuenta como venta pero no se compra de nuevo.
+    if (esDeInventario(r)) { deInventario.push({ producto: nombreRaw, cantidad: qty, cliente: cliente }); return; }
 
     var p = parsearProducto(nombreRaw, qty);
     if (!p.tipo) {
@@ -2400,6 +2533,7 @@ function calcularCompraProveedor(datos, fecha) {
     pulpas: pulpasResult,
     otros: otrosResult,
     ludoBerryMax: ludoBerryMaxResult,
+    deInventario: deInventario,
     ventaTotal: ventaTotal,
     costoTotalProveedor: costoTotalProveedor,
     gananciaNeta: gananciaNeta
@@ -2440,6 +2574,17 @@ function renderProveedor() {
     '<div><div class="prov-stat-label">PAGO PROVEEDOR</div><div class="prov-stat-val naranja">$'+fmtMoney(calc.costoTotalProveedor)+'</div></div>'+
     '<div><div class="prov-stat-label">GANANCIA NETA</div><div class="prov-stat-val '+gnClass+'">$'+fmtMoney(calc.gananciaNeta)+'</div></div>';
   container.appendChild(sumDiv);
+
+  if (calc.deInventario.length) {
+    var invDiv = document.createElement("div");
+    invDiv.className = "kpi-block";
+    invDiv.style.marginTop = "12px";
+    invDiv.innerHTML = '<div class="kpi-label">📦 SALE DE INVENTARIO — NO PEDIR AL PROVEEDOR</div>' +
+      calc.deInventario.map(function(d){
+        return '<div class="pedido-line"><span class="pedido-fruta">'+d.producto+'</span><span class="pedido-cant">'+d.cantidad+' · '+d.cliente+'</span></div>';
+      }).join("");
+    container.appendChild(invDiv);
+  }
 
   // ── Tarjeta por fruta ──
   Object.keys(B).sort().forEach(function(fn) {

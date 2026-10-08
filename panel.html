@@ -2044,12 +2044,15 @@ function calcularInventario(datos) {
                     .sort(function(a,b){ return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : a.i - b.i; });
   function disponible(l){ return l.sobrante - l.vendidos.reduce(function(t,v){ return t+v.unidades; }, 0); }
 
-  // Venta de un producto no-berry: se surte de inventario si alcanza completa
+  // Venta de un producto no-berry: se surte de inventario si alcanza completa.
+  // Solo lotes de fecha ANTERIOR a la venta: un pedido no vendido que se pasa
+  // a INVENTARIO (ej. Yair 3-oct) no debe surtir otra venta del mismo día,
+  // que ya se compró al proveedor (Luz 3-oct, mismo sabor).
   var sinLote = [];
   ventas.forEach(function(v){
     if (v.fecha < INICIO_DESCUENTO_AUTO) return;
     var k = claveInventario(v.r);
-    var candidatos = lotes.filter(function(l){ return l.clave === k.clave && l.fecha <= v.fecha && (!l.vence || v.fecha <= l.vence); });
+    var candidatos = lotes.filter(function(l){ return l.clave === k.clave && l.fecha < v.fecha &&(!l.vence || v.fecha <= l.vence); });
     var hay = candidatos.reduce(function(t,l){ return t + disponible(l); }, 0);
     if (!candidatos.length || hay < k.unidades) return;
     var faltan = k.unidades;

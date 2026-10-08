@@ -2048,11 +2048,15 @@ function calcularInventario(datos) {
   // Solo lotes de fecha ANTERIOR a la venta: un pedido no vendido que se pasa
   // a INVENTARIO (ej. Yair 3-oct) no debe surtir otra venta del mismo día,
   // que ya se compró al proveedor (Luz 3-oct, mismo sabor).
+  // Venta marcada a mano "De inventario": el usuario confirma que salió del
+  // lote, así que se ignora la caducidad (ej. Ama 3-oct, pulpas compradas
+  // 30-ago, vencían 30-sep pero seguían buenas).
   var sinLote = [];
   ventas.forEach(function(v){
     if (v.fecha < INICIO_DESCUENTO_AUTO) return;
     var k = claveInventario(v.r);
-    var candidatos = lotes.filter(function(l){ return l.clave === k.clave && l.fecha < v.fecha &&(!l.vence || v.fecha <= l.vence); });
+    var marcada = String(v.r[14] || "").trim() === "Inventario";
+    var candidatos = lotes.filter(function(l){ return l.clave === k.clave && l.fecha < v.fecha && (marcada || !l.vence || v.fecha <= l.vence); });
     var hay = candidatos.reduce(function(t,l){ return t + disponible(l); }, 0);
     if (!candidatos.length || hay < k.unidades) return;
     var faltan = k.unidades;

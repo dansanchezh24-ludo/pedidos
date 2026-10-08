@@ -269,9 +269,9 @@ function switchTab(tab) {
 // Columna O (índice 14) del Sheet: "Inventario" = esta venta se surtió con
 // clamshells que SOBRARON de una compra anterior (ver pestaña Inventario), no
 // con producto comprado para esa fecha. Se marca con el toggle "📦 De
-// inventario" de index.html. Cuenta como venta normal (Tablero/Resumen), pero
-// NO se le vuelve a pedir al proveedor y su costo es $0 — ya se pagó (y ya se
-// cargó como merma) en la fecha en que se compró el bote original.
+// inventario" de index.html. Cuenta como venta normal (Tablero/Resumen) con su
+// costo real (costo de lo vendido), pero NO se le vuelve a pedir al proveedor
+// — el pago de caja ya quedó en Proveedor en la fecha de compra original.
 // También es true cuando calcularInventario la surtió automáticamente con un
 // producto de inventario no perecedero-del-día (pulpas, Jamaica, chile seco).
 function esDeInventario(r) { return !!r._deInventario || String(r[14] || "").trim() === "Inventario"; }
@@ -562,7 +562,11 @@ function esNombreFamiliar(nombreComercial) {
 //          meses del año aplicó cada costo.
 function filasVenta(r) {
   var filas = filasVentaSinOrigen(r);
-  if (esDeInventario(r)) filas.forEach(function(f){ f.costo = 0; }); // ver esDeInventario
+  // Compra de inventario (Dan / INVENTARIO): es producto guardado, no gasto —
+  // su costo se carga en la venta que lo saca (costo de lo vendido). Si aquí
+  // también contara, el Tablero lo restaría dos veces. El pago de caja sigue
+  // en Proveedor (calcularCompraProveedor) en la fecha de compra.
+  if (esEntradaInventario(r)) filas.forEach(function(f){ f.costo = 0; });
   return filas;
 }
 

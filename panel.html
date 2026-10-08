@@ -1988,7 +1988,7 @@ async function cargarInventario() {
 // "INVENTARIO", precio $0): producto ya pagado que se guarda para venderlo
 // después. Caducidad en meses desde la fecha del pedido (por tipo de
 // parsearProducto); sin entrada = no caduca (Jamaica, chile seco).
-var CADUCIDAD_INVENTARIO_MESES = { pulpa: 1 }; // pulpas en congelador
+var CADUCIDAD_INVENTARIO_MESES = { pulpa: 6 }; // pulpas congeladas: 6 meses en congelador
 // Nombres viejos → nombre actual, para que una venta con el nombre nuevo
 // descuente un lote capturado con el viejo.
 // El descuento automático solo aplica a entregas desde esta fecha: las ventas
@@ -2172,7 +2172,7 @@ function renderInventario() {
       inv.sinLote.map(function(s){ return '<div class="pedido-line"><span class="pedido-fruta">'+fmtFechaCorta(s.fecha)+' · '+s.nombre+' · '+s.cliente+'</span><span class="pedido-cant">'+s.unidades+'</span></div>'; }).join('')+
       '</div>';
   }
-  html += '<p style="color:#5a8a5a;font-size:11px;text-align:center;margin-top:14px">Berries: el sobrante del redondeo a botes de 3 entra solo; para venderlo otro día marca "📦 De inventario". Pulpas, Jamaica y chile capturados con dirección INVENTARIO se descuentan solos cuando alguien los pide (pulpas: caducan 1 mes después de la compra).</p>';
+  html += '<p style="color:#5a8a5a;font-size:11px;text-align:center;margin-top:14px">Berries: el sobrante del redondeo a botes de 3 entra solo; para venderlo otro día marca "📦 De inventario". Pulpas, Jamaica y chile capturados con dirección INVENTARIO se descuentan solos cuando alguien los pide (pulpas: caducan 6 meses después de la compra, en congelador).</p>';
   document.getElementById("inventarioContent").innerHTML = html;
 }
 

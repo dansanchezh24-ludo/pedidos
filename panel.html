@@ -404,7 +404,34 @@ function calcularUtilidadPorCliente(datos) {
  * al proveedor, así que el redondeo a botes se hace por fecha y luego se suma —
  * esto refleja lo que realmente se paga, no un promedio teórico).
  */
+/**
+ * Venta y costo de UNA fecha para el Tablero (costo de lo vendido, no pago de
+ * caja). Se parte de calcularCompraProveedor, con dos ajustes:
+ *  - Compras de inventario (Dan / INVENTARIO) fuera: son producto guardado,
+ *    no venta ni gasto. El pago de caja sigue en Proveedor en su fecha.
+ *  - Ventas surtidas con inventario no-berry (pulpas, Jamaica, chile seco)
+ *    cargan su costo real aquí, en la fecha en que se venden — sin esto una
+ *    venta a precio familiar salía con utilidad y la compra como pérdida.
+ *    Las berries por bote (HIST_COSTO_PROVEEDOR) siguen en $0: su sobrante ya
+ *    se cargó como merma el día que se compró el bote (son perecederas). No
+ *    basta isBerry() — también incluye productos por kg como Jamaica.
+ */
+function ventaCostoTableroFecha(filas, fecha) {
+  var c = calcularCompraProveedor(filas.filter(function(r){ return !esEntradaInventario(r); }), fecha);
+  var costoInventario = 0;
+  filas.forEach(function(r){
+    if (esEntradaInventario(r) || !esDeInventario(r)) return;
+    filasVentaSinOrigen(r).forEach(function(fv){
+      if (!HIST_COSTO_PROVEEDOR.hasOwnProperty(fv.fruta)) costoInventario += fv.costo || 0;
+    });
+  });
+  return { venta: c.ventaTotal, costo: c.costoTotalProveedor + costoInventario };
+}
+
 function calcularKPIsGlobal(datos) {
+  // Compras de inventario no son ventas: fuera de productos vendidos,
+  // pedidos, clientes y días con entrega (ver ventaCostoTableroFecha).
+  datos = datos.filter(function(r){ return !esEntradaInventario(r); });
   var porFecha = {};
   datos.forEach(function(r){
     var f = fmtFecha(r[6]);
@@ -414,9 +441,9 @@ function calcularKPIsGlobal(datos) {
 
   var ventasTotales = 0, pagoProveedorTotal = 0;
   Object.keys(porFecha).forEach(function(f){
-    var c = calcularCompraProveedor(porFecha[f], f);
-    ventasTotales += c.ventaTotal;
-    pagoProveedorTotal += c.costoTotalProveedor;
+    var c = ventaCostoTableroFecha(porFecha[f], f);
+    ventasTotales += c.venta;
+    pagoProveedorTotal += c.costo;
   });
 
   var productosVendidos = datos.reduce(function(s,r){ return s+(parseFloat(r[1])||0); },0);
@@ -948,11 +975,11 @@ function calcularVentasPorPeriodo(datos, agrupacion) {
   });
   var porPeriodo = {};
   Object.keys(porFecha).forEach(function(f) {
-    var c = calcularCompraProveedor(porFecha[f], f);
+    var c = ventaCostoTableroFecha(porFecha[f], f);
     var key = agrupacion === "mes" ? f.slice(0, 7) : claveSemana(f);
     if (!porPeriodo[key]) porPeriodo[key] = { venta: 0, costo: 0 };
-    porPeriodo[key].venta += c.ventaTotal;
-    porPeriodo[key].costo += c.costoTotalProveedor;
+    porPeriodo[key].venta += c.venta;
+    porPeriodo[key].costo += c.costo;
   });
   return Object.keys(porPeriodo).sort().map(function(k) {
     var p = porPeriodo[k];
@@ -1057,10 +1084,22 @@ function renderTablero() {
 
   html += '<div class="kpi-grid">';
   html += kpiCard("VENTAS TOTALES", "$"+fmtMoney(k.ventasTotales));
-  html += kpiCard("PAGO A PROVEEDOR", "$"+fmtMoney(k.pagoProveedorTotal), "naranja");
+  html += kpiCard("COSTO DE LO VENDIDO", "$"+fmtMoney(k.pagoProveedorTotal), "naranja");
   html += kpiCard("UTILIDAD NETA", "$"+fmtMoney(k.utilidadNeta), k.utilidadNeta<0 ? "rojo" : "");
   html += kpiCardPresentacion("PRODUCTOS VENDIDOS", k.porPresentacion);
   html += '</div>';
+
+  // Inventario en existencia (pulpas/Jamaica/chile seco ya pagados, sin
+  // vender ni caducar): no resta en la utilidad — su costo se carga cuando se
+  // venda (ver ventaCostoTableroFecha). Es foto de hoy, no depende del rango
+  // ni de la vista Clientes/Familia.
+  var invExist = calcularInventario(kpiData).lotes.reduce(function(t,l){
+    return (l.perecedero || l.futuro || l.esMerma) ? t : t + l.costoRestante;
+  }, 0);
+  if (invExist > 0) {
+    html += '<div class="kpi-card" style="margin-bottom:12px"><div class="kpi-label">📦 INVENTARIO EN EXISTENCIA (A COSTO)</div><div class="kpi-val">$'+fmtMoney(invExist)+'</div>'+
+      '<div class="kpi-mini-label" style="margin-top:4px">ya pagado — no resta en la utilidad hasta que se venda</div></div>';
+  }
 
   html += '<div class="kpi-mini-row">';
   html += kpiMini("PEDIDOS", k.numPedidos);

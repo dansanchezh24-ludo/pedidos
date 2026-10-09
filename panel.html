@@ -2057,9 +2057,12 @@ function calcularInventario(datos) {
   // 30-ago, vencían 30-sep pero seguían buenas).
   var sinLote = [];
   ventas.forEach(function(v){
-    if (v.fecha < INICIO_DESCUENTO_AUTO) return;
-    var k = claveInventario(v.r);
+    // INICIO_DESCUENTO_AUTO solo limita el descuento automático; una venta
+    // marcada a mano se surte del lote aunque sea anterior (ej. pulpas del
+    // 30-ago vendidas el 5 y 19-sep).
     var marcada = String(v.r[14] || "").trim() === "Inventario";
+    if (v.fecha < INICIO_DESCUENTO_AUTO && !marcada) return;
+    var k = claveInventario(v.r);
     var candidatos = lotes.filter(function(l){ return l.clave === k.clave && l.fecha < v.fecha && (marcada || !l.vence || v.fecha <= l.vence); });
     var hay = candidatos.reduce(function(t,l){ return t + disponible(l); }, 0);
     if (!candidatos.length || hay < k.unidades) return;
